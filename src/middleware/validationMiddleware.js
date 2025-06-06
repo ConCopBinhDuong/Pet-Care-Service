@@ -31,8 +31,8 @@ export const validateRegistration = [
   // Conditional validation for pet owner
   body('phone')
     .if(body('role').equals('Pet owner'))
-    .isMobilePhone()
-    .withMessage('Please provide a valid phone number'),
+    .matches(/^(\+84|84|0)(3[2-9]|5[6|8|9]|7[0|6-9]|8[1-5|8]|9[0-9])[0-9]{7}$/)
+    .withMessage('Please provide a valid Vietnamese phone number (e.g., +84901234567, 0901234567)'),
     
   body('city')
     .if(body('role').equals('Pet owner'))
@@ -55,8 +55,8 @@ export const validateRegistration = [
     
   body('phone')
     .if(body('role').equals('Service provider'))
-    .isMobilePhone()
-    .withMessage('Please provide a valid phone number'),
+    .matches(/^(\+84|84|0)(3[2-9]|5[6|8|9]|7[0|6-9]|8[1-5|8]|9[0-9])[0-9]{7}$/)
+    .withMessage('Please provide a valid Vietnamese phone number (e.g., +84901234567, 0901234567)'),
     
   body('address')
     .if(body('role').equals('Service provider'))

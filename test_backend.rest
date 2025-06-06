@@ -1,48 +1,445 @@
-### GET / 
-GET http://localhost:5003 
+# Pet Care Service Backend API Tests
+# Updated for unified authentication system
+# Base URL: http://localhost:8383
 
+@baseUrl = http://localhost:8383
+@token = {{login_response.response.body.token}}
 
-###Register a user POST /auth/regiter 
-POST http://localhost:5003/auth/register 
-Content-Type: application/json 
+### Server Health Check
+GET {{baseUrl}}
 
-{
-    "username" : "Nhan@gmail.com", 
-    "password" : "123456"
-}
+###################################################################
+# USER AUTHENTICATION TESTS
+###################################################################
 
-###Login a user POST /auth/login 
-POST http://localhost:5003/auth/login 
-Content-Type: application/json 
-
-{
-    "username" : "Nhan@gmail.com",   
-    "password" : "123456"
-}
-
-### Fetch all todos GET /todos (protected by token) 
-GET http://localhost:5003/todos
-Authorization: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiaWF0IjoxNzQ3MjQ3MTIyLCJleHAiOjE3NDczMzM1MjJ9.FtMVFQRYuXWGjN6tvSVr-6jnD6VcgO2dnFeKacVVQms
-
-
-###Creates a new todo POST /todos (protected)
-POST http://localhost:5003/todos 
-Authorization: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiaWF0IjoxNzQ3MjQ3MTIyLCJleHAiOjE3NDczMzM1MjJ9.FtMVFQRYuXWGjN6tvSVr-6jnD6VcgO2dnFeKacVVQms
-Content-Type: application/json  
+### 1. Register Pet Owner
+# @name register_pet_owner
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
 
 {
-    "task" : "finish coding project" 
+    "username": "john_doe",
+    "email": "john.doe@example.com",
+    "password": "SecurePass123",
+    "gender": "Male",
+    "role": "Pet owner",
+    "phone": "+1234567890",
+    "city": "New York",
+    "address": "123 Main Street, New York, NY 10001"
 }
 
-###update a todo PUT /todos/:id (protected) 
-PUT http://localhost:5003/todos/2 
-Authorization: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiaWF0IjoxNzQ3MjQ3MTIyLCJleHAiOjE3NDczMzM1MjJ9.FtMVFQRYuXWGjN6tvSVr-6jnD6VcgO2dnFeKacVVQms
-Content-Type: application/json 
+### 2. Register Service Provider
+# @name register_service_provider
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
 
 {
-    "completed" : 1 
+    "username": "happy_pets_clinic",
+    "email": "clinic@happypets.com",
+    "password": "ClinicPass123",
+    "gender": "Other",
+    "role": "Service provider",
+    "bussiness_name": "Happy Pets Veterinary Clinic",
+    "phone": "+1987654321",
+    "description": "Full-service veterinary clinic specializing in small animals",
+    "address": "456 Pet Street, New York, NY 10002",
+    "website": "https://happypets.com"
 }
 
-###Delete a todo DELETE /todos/:id (protected) 
-DELETE http://localhost:5003/todos/3 
-Authorization: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiaWF0IjoxNzQ3MjQ3MTIyLCJleHAiOjE3NDczMzM1MjJ9.FtMVFQRYuXWGjN6tvSVr-6jnD6VcgO2dnFeKacVVQms
+### 3. Register Manager
+# @name register_manager
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+    "username": "admin_manager",
+    "email": "manager@petcare.com",
+    "password": "ManagerPass123",
+    "gender": "Female",
+    "role": "Manager"
+}
+
+### 4. Login Pet Owner
+# @name login_response
+POST {{baseUrl}}/api/users/login
+Content-Type: application/json
+
+{
+    "username": "john.doe@example.com",
+    "password": "SecurePass123"
+}
+
+### 5. Login Service Provider
+# @name login_provider
+POST {{baseUrl}}/api/users/login
+Content-Type: application/json
+
+{
+    "username": "clinic@happypets.com",
+    "password": "ClinicPass123"
+}
+
+### 6. Login Manager
+# @name login_manager
+POST {{baseUrl}}/api/users/login
+Content-Type: application/json
+
+{
+    "username": "manager@petcare.com",
+    "password": "ManagerPass123"
+}
+
+### 7. Get User Profile (Protected Route)
+GET {{baseUrl}}/api/users/profile
+Authorization: Bearer {{token}}
+
+### 8. Logout User
+POST {{baseUrl}}/api/users/logout
+Authorization: Bearer {{token}}
+
+###################################################################
+# VALIDATION ERROR TESTS
+###################################################################
+
+### 9. Registration with Missing Fields
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+    "username": "incomplete_user",
+    "email": "incomplete@example.com"
+    // Missing password, gender, role
+}
+
+### 10. Registration with Invalid Email
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+    "username": "invalid_email_user",
+    "email": "not-an-email",
+    "password": "ValidPass123",
+    "gender": "Male",
+    "role": "Pet owner",
+    "phone": "+1234567890",
+    "city": "Test City",
+    "address": "Test Address"
+}
+
+### 11. Registration with Weak Password
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+    "username": "weak_password_user",
+    "email": "weak@example.com",
+    "password": "123",
+    "gender": "Male",
+    "role": "Pet owner",
+    "phone": "+1234567890",
+    "city": "Test City",
+    "address": "Test Address"
+}
+
+### 12. Registration with Invalid Role
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+    "username": "invalid_role_user",
+    "email": "invalid.role@example.com",
+    "password": "ValidPass123",
+    "gender": "Male",
+    "role": "Invalid Role"
+}
+
+### 13. Pet Owner Registration Missing Required Fields
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+    "username": "incomplete_pet_owner",
+    "email": "incomplete.owner@example.com",
+    "password": "ValidPass123",
+    "gender": "Male",
+    "role": "Pet owner"
+    // Missing phone, city, address
+}
+
+### 14. Service Provider Registration Missing Required Fields
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+    "username": "incomplete_provider",
+    "email": "incomplete.provider@example.com",
+    "password": "ValidPass123",
+    "gender": "Female",
+    "role": "Service provider"
+    // Missing bussiness_name, phone, address
+}
+
+### 15. Login with Missing Credentials
+POST {{baseUrl}}/api/users/login
+Content-Type: application/json
+
+{
+    "username": "",
+    "password": ""
+}
+
+### 16. Login with Wrong Email
+POST {{baseUrl}}/api/users/login
+Content-Type: application/json
+
+{
+    "username": "nonexistent@example.com",
+    "password": "SomePassword123"
+}
+
+### 17. Login with Wrong Password
+POST {{baseUrl}}/api/users/login
+Content-Type: application/json
+
+{
+    "username": "john.doe@example.com",
+    "password": "WrongPassword123"
+}
+
+### 18. Duplicate Email Registration
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+    "username": "duplicate_user",
+    "email": "john.doe@example.com",
+    "password": "DuplicatePass123",
+    "gender": "Male",
+    "role": "Pet owner",
+    "phone": "+1111111111",
+    "city": "Duplicate City",
+    "address": "Duplicate Address"
+}
+
+###################################################################
+# RATE LIMITING TESTS
+###################################################################
+
+### 19. Test Rate Limiting - Multiple Login Attempts
+# Run this multiple times quickly to test rate limiting
+POST {{baseUrl}}/api/users/login
+Content-Type: application/json
+
+{
+    "username": "john.doe@example.com",
+    "password": "SecurePass123"
+}
+
+###################################################################
+# TODO ROUTES (if available)
+###################################################################
+
+### 20. Fetch All Todos (Protected)
+# GET {{baseUrl}}/todos
+# Authorization: Bearer {{token}}
+
+### 21. Create New Todo (Protected)
+# POST {{baseUrl}}/todos
+# Authorization: Bearer {{token}}
+# Content-Type: application/json
+#
+# {
+#     "task": "Take Max to vet appointment",
+#     "description": "Annual checkup for Max at Happy Pets Clinic"
+# }
+
+### 22. Update Todo (Protected)
+# PUT {{baseUrl}}/todos/1
+# Authorization: Bearer {{token}}
+# Content-Type: application/json
+#
+# {
+#     "completed": true
+# }
+
+### 23. Delete Todo (Protected)
+# DELETE {{baseUrl}}/todos/1
+# Authorization: Bearer {{token}}
+
+###################################################################
+# SECURITY TESTS
+###################################################################
+
+### 24. Access Protected Route Without Token
+GET {{baseUrl}}/api/users/profile
+
+### 25. Access Protected Route With Invalid Token
+GET {{baseUrl}}/api/users/profile
+Authorization: Bearer invalid.token.here
+
+###################################################################
+# EDGE CASE TESTS
+###################################################################
+
+### 26. Very Long Username
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+    "username": "this_is_a_very_long_username_that_exceeds_fifty_characters_and_should_be_rejected",
+    "email": "long.username@example.com",
+    "password": "ValidPass123",
+    "gender": "Male",
+    "role": "Pet owner",
+    "phone": "+1234567890",
+    "city": "Test City",
+    "address": "Test Address"
+}
+
+### 27. Special Characters in Username
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+    "username": "user@#$%^&*()",
+    "email": "special.chars@example.com",
+    "password": "ValidPass123",
+    "gender": "Male",
+    "role": "Pet owner",
+    "phone": "+1234567890",
+    "city": "Test City",
+    "address": "Test Address"
+}
+
+### 28. SQL Injection Attempt
+POST {{baseUrl}}/api/users/login
+Content-Type: application/json
+
+{
+    "username": "'; DROP TABLE users; --",
+    "password": "anything"
+}
+
+### ========================================
+### Vietnamese Phone Number Validation Tests
+### ========================================
+
+### Test 28: Valid Vietnamese mobile number with +84 prefix
+POST http://localhost:3000/api/users/register
+Content-Type: application/json
+
+{
+  "username": "vietnameseuser1",
+  "email": "vietnamese1@test.com",
+  "password": "Password123",
+  "gender": "Male",
+  "role": "Pet owner",
+  "phone": "+84901234567",
+  "city": "Ho Chi Minh City",
+  "address": "123 Nguyen Hue Street"
+}
+
+### Test 29: Valid Vietnamese mobile number with 84 prefix (no +)
+POST http://localhost:3000/api/users/register
+Content-Type: application/json
+
+{
+  "username": "vietnameseuser2",
+  "email": "vietnamese2@test.com",
+  "password": "Password123",
+  "gender": "Female",
+  "role": "Pet owner",
+  "phone": "84938765432",
+  "city": "Hanoi",
+  "address": "456 Ba Trieu Street"
+}
+
+### Test 30: Valid Vietnamese mobile number with 0 prefix (domestic format)
+POST http://localhost:3000/api/users/register
+Content-Type: application/json
+
+{
+  "username": "vietnameseuser3",
+  "email": "vietnamese3@test.com",
+  "password": "Password123",
+  "gender": "Other",
+  "role": "Pet owner",
+  "phone": "0977123456",
+  "city": "Da Nang",
+  "address": "789 Tran Phu Street"
+}
+
+### Test 31: Valid Vietnamese mobile for Service Provider
+POST http://localhost:3000/api/users/register
+Content-Type: application/json
+
+{
+  "username": "petservice_vn",
+  "email": "petservice@vietnam.com",
+  "password": "Password123",
+  "gender": "Male",
+  "role": "Service provider",
+  "bussiness_name": "Saigon Pet Care",
+  "phone": "0909876543",
+  "address": "101 Le Lai Street, District 1, Ho Chi Minh City"
+}
+
+### Test 32: Invalid Vietnamese mobile - wrong network prefix
+POST http://localhost:3000/api/users/register
+Content-Type: application/json
+
+{
+  "username": "invalidphone1",
+  "email": "invalid1@test.com",
+  "password": "Password123",
+  "gender": "Male",
+  "role": "Pet owner",
+  "phone": "0801234567",
+  "city": "Ho Chi Minh City",
+  "address": "123 Test Street"
+}
+
+### Test 33: Invalid Vietnamese mobile - too short
+POST http://localhost:3000/api/users/register
+Content-Type: application/json
+
+{
+  "username": "invalidphone2",
+  "email": "invalid2@test.com",
+  "password": "Password123",
+  "gender": "Female",
+  "role": "Pet owner",
+  "phone": "090123456",
+  "city": "Hanoi",
+  "address": "456 Test Street"
+}
+
+### Test 34: Invalid Vietnamese mobile - too long
+POST http://localhost:3000/api/users/register
+Content-Type: application/json
+
+{
+  "username": "invalidphone3",
+  "email": "invalid3@test.com",
+  "password": "Password123",
+  "gender": "Other",
+  "role": "Pet owner",
+  "phone": "09012345678",
+  "city": "Da Nang",
+  "address": "789 Test Street"
+}
+
+### Test 35: Invalid Vietnamese mobile - international format but wrong country code
+POST http://localhost:3000/api/users/register
+Content-Type: application/json
+
+{
+  "username": "invalidphone4",
+  "email": "invalid4@test.com",
+  "password": "Password123",
+  "gender": "Male",
+  "role": "Service provider",
+  "bussiness_name": "Test Pet Service",
+  "phone": "+1234567890",
+  "address": "123 Test Street"
+}

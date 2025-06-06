@@ -6,7 +6,7 @@ const db = new DatabaseSync(':memory:');
 db.exec(`
   CREATE TABLE users (
     userid INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL,
+    name TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
     password TEXT NOT NULL,
     gender TEXT CHECK(gender IN ('Male', 'Female', 'Other')),
@@ -27,7 +27,7 @@ db.exec(`
     phone TEXT UNIQUE,
     city TEXT,
     address TEXT,
-    FOREIGN_KEY(id) REFERENCES users(userid) ON UPDATE CASCADE ON DELETE CASCADE
+    FOREIGN KEY(id) REFERENCES users(userid) ON UPDATE CASCADE ON DELETE CASCADE
   );
 `);
 
