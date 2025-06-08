@@ -1,0 +1,140 @@
+### Pet Management API Tests
+### Base URL: http://localhost:8383/api
+
+# Test Tokens (Generated with JWT_SECRET from .env)
+@petOwnerToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZW1haWwiOiJwZXRvd25lcjFAZXhhbXBsZS5jb20iLCJyb2xlIjoiUGV0IG93bmVyIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNzQ5MzA3OTM4LCJleHAiOjE3NDkzOTQzMzh9.IR0KWS3DlVwgDRAE7Vapvi4wpBXcd0syM9Ab5hWOjHk
+@serviceProviderToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwiZW1haWwiOiJ2ZXRAZXhhbXBsZS5jb20iLCJyb2xlIjoiU2VydmljZSBwcm92aWRlciIsIm5hbWUiOiJEci4gV2lsc29uIiwiaWF0IjoxNzQ5MzA3OTM4LCJleHAiOjE3NDkzOTQzMzh9.rCJJ_o8K0DO7QCgj_yVfgPEx9Wylq4RfJZn6-nZU6Lg
+@managerToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NSwiZW1haWwiOiJpbnZhbGlkQGV4YW1wbGUuY29tIiwicm9sZSI6Ik1hbmFnZXIiLCJuYW1lIjoiQWRtaW4gVXNlciIsImlhdCI6MTc0OTMwNzkzOCwiZXhwIjoxNzQ5Mzk0MzM4fQ.TzhgEXHYyP0NDXpI-_iV2dd96NCZNQhr31bpxqIvxQI
+
+### 1. Register Pet Owner
+POST http://localhost:8383/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "petowner_test",
+  "email": "petowner@example.com",
+  "password": "TestPass123",
+  "gender": "Female",
+  "role": "Pet owner",
+  "phone": "0987654321",
+  "city": "Ho Chi Minh City",
+  "address": "123 Pet Street, District 1"
+}
+
+### 2. Login Pet Owner
+POST http://localhost:8383/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "petowner@example.com",
+  "password": "TestPass123"
+}
+
+### 3. Get All Pets (Empty initially)
+GET http://localhost:8383/api/pets
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+
+### 4. Add New Pet
+POST http://localhost:8383/api/pets
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+Content-Type: application/json
+
+{
+  "name": "Buddy",
+  "breed": "Golden Retriever",
+  "description": "A friendly and energetic dog",
+  "age": 3,
+  "dob": "2021-06-15",
+  "picture": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+}
+
+### 5. Get All Pets (Should show the added pet)
+GET http://localhost:8383/api/pets
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+
+### 6. Get Specific Pet by ID
+GET http://localhost:8383/api/pets/1
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+
+### 7. Update Pet Information
+PUT http://localhost:8383/api/pets/1
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+Content-Type: application/json
+
+{
+  "name": "Buddy Updated",
+  "breed": "Labrador Retriever",
+  "description": "A very friendly and calm dog",
+  "age": 4
+}
+
+### 8. Add Another Pet
+POST http://localhost:8383/api/pets
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+Content-Type: application/json
+
+{
+  "name": "Fluffy",
+  "breed": "Persian Cat",
+  "description": "A calm and beautiful cat",
+  "age": 2,
+  "dob": "2022-03-10",
+  "picture": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+}
+
+### 9. Test Access Control - Register Service Provider
+POST http://localhost:8383/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "serviceprovider_test",
+  "email": "provider@example.com",
+  "password": "TestPass123",
+  "gender": "Male",
+  "role": "Service provider",
+  "bussiness_name": "Test Pet Services",
+  "phone": "0123456789",
+  "address": "456 Service Ave, District 2"
+}
+
+### 10. Login Service Provider
+POST http://localhost:8383/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "provider@example.com",
+  "password": "TestPass123"
+}
+
+### 11. Test Access Denial for Service Provider (Should return 403)
+GET http://localhost:8383/api/pets
+Authorization: Bearer SERVICE_PROVIDER_JWT_TOKEN_HERE
+
+### 12. Test Invalid Pet ID (Should return 404)
+GET http://localhost:8383/api/pets/99999
+Authorization: Bearer YOUR_PET_OWNER_JWT_TOKEN_HERE
+
+### 13. Test Invalid Pet Update (Should return 400 if validation fails)
+PUT http://localhost:8383/api/pets/1
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+Content-Type: application/json
+
+{
+  "name": "",
+  "age": -5
+}
+
+### 14. Delete Pet
+DELETE http://localhost:8383/api/pets/1
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+
+### 15. Verify Pet Deletion (Should return 404)
+GET http://localhost:8383/api/pets/1
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+
+### 16. Test Unauthorized Access (No token)
+GET http://localhost:8383/api/pets
+
+### 17. Test Invalid Token
+GET http://localhost:8383/api/pets
+Authorization: Bearer invalid_token_here

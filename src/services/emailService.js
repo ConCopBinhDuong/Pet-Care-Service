@@ -1,0 +1,241 @@
+import nodemailer from 'nodemailer';
+import crypto from 'crypto';
+
+class EmailService {
+    constructor() {
+        // Configure email transporter
+        // For development, we'll use a test account or console output
+        // In production, configure with real SMTP settings
+        this.transporter = this.createTransporter();
+    }
+
+    createTransporter() {
+        // For development - create a test account
+        // In production, replace with your SMTP configuration
+        if (process.env.NODE_ENV === 'production') {
+            return nodemailer.createTransport({
+                host: process.env.SMTP_HOST,
+                port: parseInt(process.env.SMTP_PORT) || 587,
+                secure: false,
+                auth: {
+                    user: process.env.SMTP_USER,
+                    pass: process.env.SMTP_PASS
+                }
+            });
+        } else {
+            // Development mode - log emails to console
+            return nodemailer.createTransport({
+                streamTransport: true,
+                newline: 'unix',
+                buffer: true
+            });
+        }
+    }
+
+    generateVerificationCode() {
+        // Generate a 6-digit verification code
+        return Math.floor(100000 + Math.random() * 900000).toString();
+    }
+
+    generatePhoneVerificationCode() {
+        // Generate a 6-digit verification code (same as email for consistency)
+        return Math.floor(100000 + Math.random() * 900000).toString();
+    }
+
+    async sendEmailVerification(email, code, userName) {
+        const mailOptions = {
+            from: process.env.EMAIL_FROM || 'noreply@petcare.com',
+            to: email,
+            subject: 'Verify Your Email Address - Pet Care Service',
+            html: this.getEmailVerificationTemplate(code, userName)
+        };
+
+        try {
+            if (process.env.NODE_ENV === 'production') {
+                const info = await this.transporter.sendMail(mailOptions);
+                console.log('Email verification sent:', info.messageId);
+                return { success: true, messageId: info.messageId };
+            } else {
+                // Development mode - log to console
+                console.log('\n📧 Email Verification Code (Development Mode)');
+                console.log('===============================================');
+                console.log(`To: ${email}`);
+                console.log(`Subject: ${mailOptions.subject}`);
+                console.log(`Verification Code: ${code}`);
+                console.log('===============================================\n');
+                return { success: true, messageId: 'dev-mode-email' };
+            }
+        } catch (error) {
+            console.error('Email sending failed:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async sendPhoneVerification(phone, code) {
+        // In a real application, integrate with SMS service like Twilio, AWS SNS, etc.
+        // For development, we'll log to console
+        try {
+            if (process.env.NODE_ENV === 'production') {
+                // TODO: Integrate with SMS service
+                // Example with Twilio:
+                // const twilioClient = require('twilio')(accountSid, authToken);
+                // await twilioClient.messages.create({
+                //     body: `Your Pet Care verification code is: ${code}`,
+                //     from: process.env.TWILIO_PHONE_NUMBER,
+                //     to: phone
+                // });
+                console.log(`SMS would be sent to ${phone} with code: ${code}`);
+                return { success: true, messageId: 'sms-sent' };
+            } else {
+                // Development mode - log to console
+                console.log('\n📱 SMS Verification Code (Development Mode)');
+                console.log('============================================');
+                console.log(`To: ${phone}`);
+                console.log(`Message: Your Pet Care verification code is: ${code}`);
+                console.log('============================================\n');
+                return { success: true, messageId: 'dev-mode-sms' };
+            }
+        } catch (error) {
+            console.error('SMS sending failed:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    getEmailVerificationTemplate(code, userName) {
+        return `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Email Verification</title>
+            <style>
+                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                .header { background: #4CAF50; color: white; padding: 20px; text-align: center; }
+                .content { padding: 20px; background: #f9f9f9; }
+                .code { font-size: 24px; font-weight: bold; color: #4CAF50; background: #e8f5e8; padding: 15px; text-align: center; margin: 20px 0; border-radius: 5px; }
+                .footer { padding: 20px; text-align: center; color: #666; font-size: 14px; }
+                .warning { color: #ff6b6b; font-weight: bold; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🐾 Pet Care Service</h1>
+                    <h2>Email Verification Required</h2>
+                </div>
+                <div class="content">
+                    <h3>Hello ${userName}!</h3>
+                    <p>Thank you for registering with Pet Care Service. To complete your registration, please verify your email address.</p>
+                    
+                    <p>Your verification code is:</p>
+                    <div class="code">${code}</div>
+                    
+                    <p>Please enter this code in the verification form to activate your account.</p>
+                    
+                    <p class="warning">⚠️ This code will expire in 1 minute for security reasons.</p>
+                    
+                    <p>If you didn't request this verification, please ignore this email.</p>
+                </div>
+                <div class="footer">
+                    <p>© 2025 Pet Care Service. All rights reserved.</p>
+                    <p>This is an automated message, please do not reply.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        `;
+    }
+
+    async sendWelcomeEmail(email, userName, userRole) {
+        const mailOptions = {
+            from: process.env.EMAIL_FROM || 'noreply@petcare.com',
+            to: email,
+            subject: 'Welcome to Pet Care Service! 🐾',
+            html: this.getWelcomeEmailTemplate(userName, userRole)
+        };
+
+        try {
+            if (process.env.NODE_ENV === 'production') {
+                const info = await this.transporter.sendMail(mailOptions);
+                console.log('Welcome email sent:', info.messageId);
+                return { success: true, messageId: info.messageId };
+            } else {
+                console.log('\n🎉 Welcome Email (Development Mode)');
+                console.log('===================================');
+                console.log(`To: ${email}`);
+                console.log(`Subject: ${mailOptions.subject}`);
+                console.log(`User: ${userName} (${userRole})`);
+                console.log('===================================\n');
+                return { success: true, messageId: 'dev-mode-welcome' };
+            }
+        } catch (error) {
+            console.error('Welcome email sending failed:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    getWelcomeEmailTemplate(userName, userRole) {
+        const roleSpecificContent = userRole === 'Pet owner' 
+            ? 'You can now register your pets, book services, and manage your pet care schedule.'
+            : 'You can now set up your services, manage bookings, and connect with pet owners.';
+
+        return `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Welcome to Pet Care Service</title>
+            <style>
+                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                .header { background: #4CAF50; color: white; padding: 20px; text-align: center; }
+                .content { padding: 20px; background: #f9f9f9; }
+                .features { background: white; padding: 15px; margin: 20px 0; border-radius: 5px; }
+                .footer { padding: 20px; text-align: center; color: #666; font-size: 14px; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🐾 Welcome to Pet Care Service!</h1>
+                </div>
+                <div class="content">
+                    <h3>Hello ${userName}!</h3>
+                    <p>Welcome to Pet Care Service! Your account has been successfully verified and activated.</p>
+                    
+                    <p><strong>Account Type:</strong> ${userRole}</p>
+                    
+                    <div class="features">
+                        <h4>🎯 What you can do now:</h4>
+                        <p>${roleSpecificContent}</p>
+                        
+                        <ul>
+                            ${userRole === 'Pet owner' ? `
+                                <li>Register and manage your pets</li>
+                                <li>Browse and book services</li>
+                                <li>Track your bookings</li>
+                                <li>Manage pet schedules and activities</li>
+                            ` : `
+                                <li>Set up your business profile</li>
+                                <li>Add your services and pricing</li>
+                                <li>Manage customer bookings</li>
+                                <li>Communicate with pet owners</li>
+                            `}
+                        </ul>
+                    </div>
+                    
+                    <p>Thank you for choosing Pet Care Service. We're excited to help you on your pet care journey!</p>
+                </div>
+                <div class="footer">
+                    <p>© 2025 Pet Care Service. All rights reserved.</p>
+                    <p>Need help? Contact our support team anytime!</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        `;
+    }
+}
+
+export default new EmailService();

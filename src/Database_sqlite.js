@@ -10,9 +10,14 @@ db.exec(`
     email TEXT NOT NULL UNIQUE,
     password TEXT NOT NULL,
     gender TEXT CHECK(gender IN ('Male', 'Female', 'Other')),
-    role TEXT CHECK(role IN ('Pet owner', 'Service provider', 'Manager'))
+    role TEXT CHECK(role IN ('Pet owner', 'Service provider', 'Manager')),
+    email_verified INTEGER DEFAULT 0 CHECK(email_verified IN (0, 1)),
+    phone_verified INTEGER DEFAULT 0 CHECK(phone_verified IN (0, 1)),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `);
+
+// Removed verification_codes table - using in-memory verification system instead
 
 db.exec(`
   CREATE TABLE manager (
@@ -213,7 +218,7 @@ db.exec(`
 db.exec(`
   CREATE TABLE service_review (
     bookid INTEGER PRIMARY KEY,
-    start INTEGER,
+    stars INTEGER,
     comment TEXT,
     FOREIGN KEY(bookid) REFERENCES booking(bookid) ON UPDATE CASCADE ON DELETE CASCADE
   );

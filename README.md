@@ -139,44 +139,6 @@ The `todo-app.rest` file includes requests for:
 3. Run the requests by clicking on the "Send Request" link above each block of HTTP code.
 4. Make sure to copy the token from the login response and replace `{{token}}` with the actual JWT token for protected routes.
 
-## Phone Number Validation
-
-This application uses Vietnamese phone number validation for all user registrations. The system supports three formats:
-
-### Supported Formats
-- **International with +**: `+84901234567`
-- **International without +**: `84901234567`
-- **Domestic format**: `0901234567`
-
-### Valid Network Prefixes
-The validation follows Vietnamese mobile network standards:
-- **Viettel**: 32-39, 96-99
-- **Vinaphone**: 81-85, 88
-- **Mobifone**: 70, 76-79, 89, 90-93
-- **Vietnamobile**: 56, 58
-- **Gmobile**: 59, 95
-
-### Regex Pattern
-```javascript
-/^(\+84|84|0)(3[2-9]|5[6|8|9]|7[0|6-9]|8[1-5]|9[0-9])[0-9]{7}$/
-```
-
-### Usage Examples
-```javascript
-// Valid Vietnamese phone numbers
-"+84901234567"  // ✅ International with +
-"84901234567"   // ✅ International without +
-"0901234567"    // ✅ Domestic format
-"0381234567"    // ✅ Viettel network
-"0561234567"    // ✅ Vietnamobile network
-
-// Invalid examples
-"0801234567"    // ❌ Invalid network prefix
-"090123456"     // ❌ Too short
-"09012345678"   // ❌ Too long
-"+1234567890"   // ❌ Wrong country code
-```
-
 ## Conclusion
 
-This guide covers the main components of the app and how to get it up and running on your local machine. It highlights key considerations for Node.js version compatibility and provides a ready-to-use `test_backend.rest` file for testing. You can now explore the app's functionality, including authentication and CRUD operations!
+This guide covers the main components of the app and how to get it up and running on your local machine. It highlights key considerations for Node.js version compatibility and provides a ready-to-use `todo-app.rest` file for testing. You can now explore the app's functionality, including authentication and CRUD operations on todos!

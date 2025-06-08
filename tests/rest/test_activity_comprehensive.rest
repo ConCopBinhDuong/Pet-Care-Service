@@ -1,0 +1,328 @@
+###############################################################################
+# PET CARE SERVICE - COMPREHENSIVE ACTIVITY MANAGEMENT API TESTS
+# Generated: 2024-01-06
+# Server: http://localhost:8383
+# 
+# TOKENS INCLUDED:
+# - Pet Owner 1 (ID: 1): Valid token for full CRUD operations
+# - Pet Owner 2 (ID: 2): Valid token for testing ownership restrictions
+# - Service Provider (ID: 4): Invalid role - should be rejected
+#
+# USAGE: Use REST Client extension in VS Code to run these tests
+# PREREQUISITES: 
+# - Server must be running on port 8383
+# - Pet owners must have pets in the database
+# - Use test_pets_comprehensive.rest to create pets first if needed
+###############################################################################
+
+@baseUrl = http://localhost:8383/api
+
+# JWT Tokens (Valid for 24 hours) - Update these with fresh tokens
+@petOwner1Token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZW1haWwiOiJwZXRvd25lcjFAZXhhbXBsZS5jb20iLCJyb2xlIjoiUGV0IG93bmVyIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNzQ5MzA3OTM4LCJleHAiOjE3NDkzOTQzMzh9.IR0KWS3DlVwgDRAE7Vapvi4wpBXcd0syM9Ab5hWOjHk
+@petOwner2Token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MiwiZW1haWwiOiJwZXRvd25lcjJAZXhhbXBsZS5jb20iLCJyb2xlIjoiUGV0IG93bmVyIiwibmFtZSI6IkphbmUgU21pdGgiLCJpYXQiOjE3NDkzMDc5MzgsImV4cCI6MTc0OTM5NDMzOH0.yv3o3HG868MEpXqLZsaqI3uQsx_BUJbIRreI_KJKkkI
+@serviceProviderToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwiZW1haWwiOiJ2ZXRAZXhhbXBsZS5jb20iLCJyb2xlIjoiU2VydmljZSBwcm92aWRlciIsIm5hbWUiOiJEci4gV2lsc29uIiwiaWF0IjoxNzQ5MzA3OTM4LCJleHAiOjE3NDkzOTQzMzh9.rCJJ_o8K0DO7QCgj_yVfgPEx9Wylq4RfJZn6-nZU6Lg
+
+###############################################################################
+# SECTION 1: AUTHENTICATION & AUTHORIZATION TESTS
+###############################################################################
+
+### 1.1 Test Without Token (Should Fail - 401)
+GET {{baseUrl}}/activity
+
+### 1.2 Test With Invalid Token (Should Fail - 401)
+GET {{baseUrl}}/activity
+Authorization: Bearer invalid_token
+
+### 1.3 Test With Service Provider Token (Should Fail - 403)
+GET {{baseUrl}}/activity
+Authorization: Bearer {{serviceProviderToken}}
+
+### 1.4 Test With Valid Pet Owner Token (Should Succeed - 200)
+GET {{baseUrl}}/activity
+Authorization: Bearer {{petOwner1Token}}
+
+###############################################################################
+# SECTION 2: ACTIVITY CREATION TESTS (Pet Owner 1)
+###############################################################################
+
+### 2.1 Create Activity - Valid Data (Should Succeed - 201)
+# Note: Replace petId with actual pet ID from your database
+POST {{baseUrl}}/activity/pet/1
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": "Morning Walk",
+    "description": "30-minute walk around the neighborhood"
+}
+
+### 2.2 Create Activity - Missing Required Field (Should Fail - 400)
+POST {{baseUrl}}/activity/pet/1
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "description": "Missing name field"
+}
+
+### 2.3 Create Activity - Invalid Activity Name (Should Fail - 400)
+POST {{baseUrl}}/activity/pet/1
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": "Activity@#$%^&*()",
+    "description": "Invalid characters in name"
+}
+
+### 2.4 Create Activity - Description Too Long (Should Fail - 400)
+POST {{baseUrl}}/activity/pet/1
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": "Test Activity",
+    "description": "This is an extremely long description that exceeds the maximum allowed character limit of 1000 characters. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt. Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem."
+}
+
+### 2.5 Create Activity - Invalid Pet ID (Should Fail - 404)
+POST {{baseUrl}}/activity/pet/99999
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": "Activity for Non-existent Pet",
+    "description": "This should fail"
+}
+
+### 2.6 Create Second Activity for Same Pet (Should Succeed - 201)
+POST {{baseUrl}}/activity/pet/1
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": "Playtime",
+    "description": "Interactive play session with toys and games"
+}
+
+### 2.7 Create Activity with Only Name (Should Succeed - 201)
+POST {{baseUrl}}/activity/pet/1
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": "Training Session"
+}
+
+###############################################################################
+# SECTION 3: ACTIVITY CREATION TESTS (Pet Owner 2 - Different User)
+###############################################################################
+
+### 3.1 Create Activity for Pet Owner 2's Pet (Should Succeed - 201)
+# Note: Replace petId with Pet Owner 2's pet ID
+POST {{baseUrl}}/activity/pet/3
+Authorization: Bearer {{petOwner2Token}}
+Content-Type: application/json
+
+{
+    "name": "Evening Jog",
+    "description": "5km jog in the park"
+}
+
+### 3.2 Try to Create Activity for Pet Owner 1's Pet (Should Fail - 403)
+POST {{baseUrl}}/activity/pet/1
+Authorization: Bearer {{petOwner2Token}}
+Content-Type: application/json
+
+{
+    "name": "Unauthorized Activity",
+    "description": "This should fail"
+}
+
+###############################################################################
+# SECTION 4: ACTIVITY RETRIEVAL TESTS
+###############################################################################
+
+### 4.1 Get All Activities for Pet Owner 1 (Should Succeed - 200)
+GET {{baseUrl}}/activity
+Authorization: Bearer {{petOwner1Token}}
+
+### 4.2 Get All Activities for Pet Owner 2 (Should Succeed - 200)
+GET {{baseUrl}}/activity
+Authorization: Bearer {{petOwner2Token}}
+
+### 4.3 Get Activities for Specific Pet (Pet Owner 1's Pet - Should Succeed - 200)
+GET {{baseUrl}}/activity/pet/1
+Authorization: Bearer {{petOwner1Token}}
+
+### 4.4 Get Activities for Another Owner's Pet (Should Fail - 403)
+GET {{baseUrl}}/activity/pet/3
+Authorization: Bearer {{petOwner1Token}}
+
+### 4.5 Get Specific Activity by ID (Should Succeed - 200)
+# Note: Replace activityId with actual activity ID from previous responses
+GET {{baseUrl}}/activity/1
+Authorization: Bearer {{petOwner1Token}}
+
+### 4.6 Get Non-Existent Activity (Should Fail - 404)
+GET {{baseUrl}}/activity/99999
+Authorization: Bearer {{petOwner1Token}}
+
+### 4.7 Get Another Owner's Activity (Should Fail - 403)
+# Note: Replace activityId with Pet Owner 2's activity ID
+GET {{baseUrl}}/activity/4
+Authorization: Bearer {{petOwner1Token}}
+
+###############################################################################
+# SECTION 5: ACTIVITY UPDATE TESTS
+###############################################################################
+
+### 5.1 Update Activity - Valid Data (Should Succeed - 200)
+# Note: Replace activityId with actual activity ID
+PUT {{baseUrl}}/activity/1
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": "Morning Walk - Extended",
+    "description": "45-minute walk around the neighborhood with extra playtime"
+}
+
+### 5.2 Update Activity - Partial Update (Should Succeed - 200)
+PUT {{baseUrl}}/activity/1
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "description": "Updated description only"
+}
+
+### 5.3 Update Activity - Invalid Data (Should Fail - 400)
+PUT {{baseUrl}}/activity/1
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": ""
+}
+
+### 5.4 Update Another Owner's Activity (Should Fail - 403)
+# Note: Replace activityId with Pet Owner 2's activity ID
+PUT {{baseUrl}}/activity/4
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": "Unauthorized Update"
+}
+
+### 5.5 Update Non-Existent Activity (Should Fail - 404)
+PUT {{baseUrl}}/activity/99999
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": "Ghost Activity"
+}
+
+###############################################################################
+# SECTION 6: ACTIVITY DELETION TESTS
+###############################################################################
+
+### 6.1 Delete Activity - Owner's Activity (Should Succeed - 200)
+# Note: Replace activityId with actual activity ID (use the training session)
+DELETE {{baseUrl}}/activity/3
+Authorization: Bearer {{petOwner1Token}}
+
+### 6.2 Delete Another Owner's Activity (Should Fail - 403)
+# Note: Replace activityId with Pet Owner 2's activity ID
+DELETE {{baseUrl}}/activity/4
+Authorization: Bearer {{petOwner1Token}}
+
+### 6.3 Delete Non-Existent Activity (Should Fail - 404)
+DELETE {{baseUrl}}/activity/99999
+Authorization: Bearer {{petOwner1Token}}
+
+### 6.4 Delete Already Deleted Activity (Should Fail - 404)
+DELETE {{baseUrl}}/activity/3
+Authorization: Bearer {{petOwner1Token}}
+
+###############################################################################
+# SECTION 7: EDGE CASE TESTS
+###############################################################################
+
+### 7.1 Create Activity with Extremely Long Name (Should Fail - 400)
+POST {{baseUrl}}/activity/pet/1
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": "This is a very very very very very very very very very very very very very very very very very very very very very very very very very very very very very very very very very very very very very very very very very very long activity name that exceeds limits",
+    "description": "This should fail"
+}
+
+### 7.2 Create Activity with Special Characters in Name (Should Succeed)
+POST {{baseUrl}}/activity/pet/1
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": "Agility Training (Beginner Level)",
+    "description": "Basic agility course with jumps and tunnels"
+}
+
+### 7.3 Create Activity with Minimal Data (Should Succeed)
+POST {{baseUrl}}/activity/pet/1
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": "Quick Exercise"
+}
+
+### 7.4 Update Activity with No Changes (Should Fail - 400)
+PUT {{baseUrl}}/activity/1
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{}
+
+### 7.5 Create Activity with Numbers and Special Characters (Should Succeed)
+POST {{baseUrl}}/activity/pet/1
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": "Exercise Session #1 (30min)",
+    "description": "First daily exercise session - includes cardio and strength training"
+}
+
+###############################################################################
+# SECTION 8: FINAL VERIFICATION TESTS
+###############################################################################
+
+### 8.1 Final List - Pet Owner 1 Activities
+GET {{baseUrl}}/activity
+Authorization: Bearer {{petOwner1Token}}
+
+### 8.2 Final List - Pet Owner 2 Activities
+GET {{baseUrl}}/activity
+Authorization: Bearer {{petOwner2Token}}
+
+### 8.3 Final List - Pet Owner 1's Pet Activities
+GET {{baseUrl}}/activity/pet/1
+Authorization: Bearer {{petOwner1Token}}
+
+###############################################################################
+# END OF TESTS
+# 
+# EXPECTED RESULTS SUMMARY:
+# - Authentication tests should properly reject unauthorized access
+# - Pet owners should only see and manipulate activities for their own pets
+# - CRUD operations should work correctly for authorized users
+# - Validation should prevent invalid data submission
+# - Error handling should return appropriate HTTP status codes
+# - Activity management should maintain data integrity and ownership boundaries
+# - Activities should be created with proper name validation
+# - Description field should be optional but properly validated when provided
+###############################################################################

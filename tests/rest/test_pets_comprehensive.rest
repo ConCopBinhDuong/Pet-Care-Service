@@ -1,0 +1,332 @@
+###############################################################################
+# PET CARE SERVICE - COMPREHENSIVE PET MANAGEMENT API TESTS
+# Generated: 2024-01-06
+# Server: http://localhost:8383
+# 
+# TOKENS INCLUDED:
+# - Pet Owner 1 (ID: 1): Valid token for full CRUD operations
+# - Pet Owner 2 (ID: 2): Valid token for testing ownership restrictions
+# - Pet Owner 3 (ID: 3): Valid token for additional testing
+# - Service Provider (ID: 4): Invalid role - should be rejected
+# - Manager (ID: 5): Invalid role - should be rejected
+#
+# USAGE: Use REST Client extension in VS Code to run these tests
+###############################################################################
+
+@baseUrl = http://localhost:8383/api
+
+# JWT Tokens (Valid for 24 hours)
+@petOwner1Token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZW1haWwiOiJwZXRvd25lcjFAZXhhbXBsZS5jb20iLCJyb2xlIjoiUGV0IG93bmVyIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNzQ5MzA3OTM4LCJleHAiOjE3NDkzOTQzMzh9.IR0KWS3DlVwgDRAE7Vapvi4wpBXcd0syM9Ab5hWOjHk
+
+@petOwner2Token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MiwiZW1haWwiOiJwZXRvd25lcjJAZXhhbXBsZS5jb20iLCJyb2xlIjoiUGV0IG93bmVyIiwibmFtZSI6IkphbmUgU21pdGgiLCJpYXQiOjE3NDkzMDc5MzgsImV4cCI6MTc0OTM5NDMzOH0.yv3o3HG868MEpXqLZsaqI3uQsx_BUJbIRreI_KJKkkI
+
+@petOwner3Token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MywiZW1haWwiOiJwZXRvd25lcjNAZXhhbXBsZS5jb20iLCJyb2xlIjoiUGV0IG93bmVyIiwibmFtZSI6IkJvYiBKb2huc29uIiwiaWF0IjoxNzQ5MzA3OTM4LCJleHAiOjE3NDkzOTQzMzh9.bdOa0VpbVyu_34MIAdXpVh3rfIg7LHBRZjqH-zDe3cQ
+
+@serviceProviderToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwiZW1haWwiOiJ2ZXRAZXhhbXBsZS5jb20iLCJyb2xlIjoiU2VydmljZSBwcm92aWRlciIsIm5hbWUiOiJEci4gV2lsc29uIiwiaWF0IjoxNzQ5MzA3OTM4LCJleHAiOjE3NDkzOTQzMzh9.rCJJ_o8K0DO7QCgj_yVfgPEx9Wylq4RfJZn6-nZU6Lg
+
+@managerToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NSwiZW1haWwiOiJpbnZhbGlkQGV4YW1wbGUuY29tIiwicm9sZSI6Ik1hbmFnZXIiLCJuYW1lIjoiQWRtaW4gVXNlciIsImlhdCI6MTc0OTMwNzkzOCwiZXhwIjoxNzQ5Mzk0MzM4fQ.TzhgEXHYyP0NDXpI-_iV2dd96NCZNQhr31bpxqIvxQI
+
+###############################################################################
+# SECTION 1: AUTHENTICATION TESTS
+###############################################################################
+
+### 1.1 Test Without Token (Should Fail - 401)
+GET {{baseUrl}}/pets
+
+### 1.2 Test With Invalid Token (Should Fail - 401)
+GET {{baseUrl}}/pets
+Authorization: Bearer invalid_token_here
+
+### 1.3 Test With Service Provider Token (Should Fail - 403)
+GET {{baseUrl}}/pets
+Authorization: Bearer {{serviceProviderToken}}
+
+### 1.4 Test With Manager Token (Should Fail - 403)
+GET {{baseUrl}}/pets
+Authorization: Bearer {{managerToken}}
+
+### 1.5 Test With Valid Pet Owner Token (Should Succeed - 200)
+GET {{baseUrl}}/pets
+Authorization: Bearer {{petOwner1Token}}
+
+###############################################################################
+# SECTION 2: PET CREATION TESTS (Pet Owner 1)
+###############################################################################
+
+### 2.1 Create Pet - Valid Data (Should Succeed - 201)
+POST {{baseUrl}}/pets
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": "Buddy",
+    "breed": "Golden Retriever",
+    "age": 3,
+    "dateOfBirth": "2021-01-15",
+    "photo": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAAAAA"
+}
+
+### 2.2 Create Pet - Missing Required Field (Should Fail - 400)
+POST {{baseUrl}}/pets
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "breed": "Labrador",
+    "age": 2
+}
+
+### 2.3 Create Pet - Invalid Age (Should Fail - 400)
+POST {{baseUrl}}/pets
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": "Max",
+    "breed": "Beagle",
+    "age": -1,
+    "dateOfBirth": "2022-01-01"
+}
+
+### 2.4 Create Pet - Invalid Date Format (Should Fail - 400)
+POST {{baseUrl}}/pets
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": "Luna",
+    "breed": "Persian Cat",
+    "age": 2,
+    "dateOfBirth": "invalid-date"
+}
+
+### 2.5 Create Pet - Invalid Photo Format (Should Fail - 400)
+POST {{baseUrl}}/pets
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": "Charlie",
+    "breed": "Border Collie",
+    "age": 4,
+    "dateOfBirth": "2020-05-10",
+    "photo": "not-base64-data"
+}
+
+### 2.6 Create Second Pet - Valid Data (Should Succeed - 201)
+POST {{baseUrl}}/pets
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": "Bella",
+    "breed": "Siamese Cat",
+    "age": 2,
+    "dateOfBirth": "2022-03-20",
+    "photo": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+}
+
+###############################################################################
+# SECTION 3: PET CREATION TESTS (Pet Owner 2 - Different User)
+###############################################################################
+
+### 3.1 Create Pet for Pet Owner 2 (Should Succeed - 201)
+POST {{baseUrl}}/pets
+Authorization: Bearer {{petOwner2Token}}
+Content-Type: application/json
+
+{
+    "name": "Rocky",
+    "breed": "German Shepherd",
+    "age": 5,
+    "dateOfBirth": "2019-07-12",
+    "photo": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAAAAA"
+}
+
+### 3.2 Create Another Pet for Pet Owner 2 (Should Succeed - 201)
+POST {{baseUrl}}/pets
+Authorization: Bearer {{petOwner2Token}}
+Content-Type: application/json
+
+{
+    "name": "Mittens",
+    "breed": "Maine Coon",
+    "age": 1,
+    "dateOfBirth": "2023-02-14"
+}
+
+###############################################################################
+# SECTION 4: PET RETRIEVAL TESTS
+###############################################################################
+
+### 4.1 Get All Pets for Pet Owner 1 (Should Return Owner 1's Pets Only)
+GET {{baseUrl}}/pets
+Authorization: Bearer {{petOwner1Token}}
+
+### 4.2 Get All Pets for Pet Owner 2 (Should Return Owner 2's Pets Only)
+GET {{baseUrl}}/pets
+Authorization: Bearer {{petOwner2Token}}
+
+### 4.3 Get All Pets for Pet Owner 3 (Should Return Empty Array)
+GET {{baseUrl}}/pets
+Authorization: Bearer {{petOwner3Token}}
+
+### 4.4 Get Specific Pet by ID - Owner's Pet (Should Succeed - 200)
+# Replace {petId} with actual pet ID from previous responses
+GET {{baseUrl}}/pets/1
+Authorization: Bearer {{petOwner1Token}}
+
+### 4.5 Get Specific Pet by ID - Another Owner's Pet (Should Fail - 403)
+# This should fail if Pet Owner 1 tries to access Pet Owner 2's pet
+GET {{baseUrl}}/pets/3
+Authorization: Bearer {{petOwner1Token}}
+
+### 4.6 Get Non-Existent Pet (Should Fail - 404)
+GET {{baseUrl}}/pets/999999
+Authorization: Bearer {{petOwner1Token}}
+
+###############################################################################
+# SECTION 5: PET UPDATE TESTS
+###############################################################################
+
+### 5.1 Update Pet - Valid Data (Should Succeed - 200)
+# Replace {petId} with actual pet ID from previous responses
+PUT {{baseUrl}}/pets/1
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": "Buddy Updated",
+    "breed": "Golden Retriever Mix",
+    "age": 4,
+    "dateOfBirth": "2021-01-15",
+    "photo": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAAAAA"
+}
+
+### 5.2 Update Pet - Invalid Data (Should Fail - 400)
+PUT {{baseUrl}}/pets/1
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": "",
+    "age": -5
+}
+
+### 5.3 Update Another Owner's Pet (Should Fail - 403)
+PUT {{baseUrl}}/pets/3
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": "Unauthorized Update"
+}
+
+### 5.4 Update Non-Existent Pet (Should Fail - 404)
+PUT {{baseUrl}}/pets/999999
+Authorization: Bearer {{petOwner1Token}}
+Content-Type: application/json
+
+{
+    "name": "Ghost Pet"
+}
+
+###############################################################################
+# SECTION 6: PET DELETION TESTS
+###############################################################################
+
+### 6.1 Delete Pet - Owner's Pet (Should Succeed - 200)
+# Replace {petId} with actual pet ID
+DELETE {{baseUrl}}/pets/2
+Authorization: Bearer {{petOwner1Token}}
+
+### 6.2 Delete Another Owner's Pet (Should Fail - 403)
+DELETE {{baseUrl}}/pets/3
+Authorization: Bearer {{petOwner1Token}}
+
+### 6.3 Delete Non-Existent Pet (Should Fail - 404)
+DELETE {{baseUrl}}/pets/999999
+Authorization: Bearer {{petOwner1Token}}
+
+### 6.4 Delete Already Deleted Pet (Should Fail - 404)
+DELETE {{baseUrl}}/pets/2
+Authorization: Bearer {{petOwner1Token}}
+
+###############################################################################
+# SECTION 7: EDGE CASE TESTS
+###############################################################################
+
+### 7.1 Create Pet with Extremely Long Name (Should Succeed or Fail Based on Validation)
+POST {{baseUrl}}/pets
+Authorization: Bearer {{petOwner3Token}}
+Content-Type: application/json
+
+{
+    "name": "This is a very very very very very very very very very very very very very very very very very very very very long pet name that might exceed database limits",
+    "breed": "Test Breed",
+    "age": 1,
+    "dateOfBirth": "2023-01-01"
+}
+
+### 7.2 Create Pet with Special Characters in Name
+POST {{baseUrl}}/pets
+Authorization: Bearer {{petOwner3Token}}
+Content-Type: application/json
+
+{
+    "name": "Fifi-Marie O'Connor (The 3rd) & Friends! 🐕",
+    "breed": "French Poodle",
+    "age": 2,
+    "dateOfBirth": "2022-06-15"
+}
+
+### 7.3 Create Pet with Future Date of Birth (Should Fail - 400)
+POST {{baseUrl}}/pets
+Authorization: Bearer {{petOwner3Token}}
+Content-Type: application/json
+
+{
+    "name": "Future Pet",
+    "breed": "Time Traveler",
+    "age": 0,
+    "dateOfBirth": "2025-12-31"
+}
+
+### 7.4 Create Pet with Age 0 (Should Succeed)
+POST {{baseUrl}}/pets
+Authorization: Bearer {{petOwner3Token}}
+Content-Type: application/json
+
+{
+    "name": "Baby Pet",
+    "breed": "Kitten",
+    "age": 0,
+    "dateOfBirth": "2024-01-01"
+}
+
+###############################################################################
+# SECTION 8: FINAL VERIFICATION TESTS
+###############################################################################
+
+### 8.1 Final List - Pet Owner 1 Pets
+GET {{baseUrl}}/pets
+Authorization: Bearer {{petOwner1Token}}
+
+### 8.2 Final List - Pet Owner 2 Pets
+GET {{baseUrl}}/pets
+Authorization: Bearer {{petOwner2Token}}
+
+### 8.3 Final List - Pet Owner 3 Pets
+GET {{baseUrl}}/pets
+Authorization: Bearer {{petOwner3Token}}
+
+###############################################################################
+# END OF TESTS
+# 
+# EXPECTED RESULTS SUMMARY:
+# - Authentication tests should properly reject unauthorized access
+# - Pet owners should only see and manipulate their own pets
+# - CRUD operations should work correctly for authorized users
+# - Validation should prevent invalid data submission
+# - Error handling should return appropriate HTTP status codes
+###############################################################################
