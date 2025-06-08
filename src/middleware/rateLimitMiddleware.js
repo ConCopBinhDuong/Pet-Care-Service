@@ -33,7 +33,7 @@ export const authLimiter = rateLimit({
  */
 export const verificationLimiter = rateLimit({
     windowMs: 1 * 60 * 1000, // 1 minute
-    max: 3, // Limit each IP to 3 verification requests per minute
+    max: 50, // Limit each IP to 3 verification requests per minute
     message: {
         success: false,
         error: 'Too many verification attempts from this IP, please wait before trying again.'
