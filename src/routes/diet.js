@@ -1,7 +1,6 @@
 import express from 'express'
 import db from '../Database_sqlite.js'
-// TODO: Add validation middleware when needed
-// import { validateDietCreation, validateDietUpdate } from '../middleware/validationMiddleware.js'
+import { validateDietCreation, validateDietUpdate } from '../middleware/validationMiddleware.js'
 
 const router = express.Router();
 
@@ -95,7 +94,7 @@ router.get('/', (req, res) => {
 });
 
 // Add a new diet for a specific pet
-router.post('/pet/:petId', (req, res) => {
+router.post('/pet/:petId', validateDietCreation, (req, res) => {
     try {
         const userId = req.userId;
         const userRole = req.userRole;
@@ -227,7 +226,7 @@ router.get('/:dietId', (req, res) => {
 });
 
 // Update a specific diet
-router.put('/:dietId', (req, res) => {
+router.put('/:dietId', validateDietUpdate, (req, res) => {
     try {
         const userId = req.userId;
         const userRole = req.userRole;

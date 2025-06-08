@@ -1,4 +1,7 @@
 import express from 'express'
+import https from 'https'
+import http from 'http'
+import fs from 'fs'
 import path, {dirname} from 'path' 
 import {fileURLToPath} from 'url'
 
@@ -21,14 +24,49 @@ import servicesRoutes from './routes/services.js'
 import bookingsRoutes from './routes/bookings.js'
 
 const app = express() ; 
-const PORT = process.env.PORT || 8383 ;
-console.log("hello world") ; 
+const HTTP_PORT = process.env.PORT || 8383 ;
+const HTTPS_PORT = process.env.HTTPS_PORT || 8443 ;
+const NODE_ENV = process.env.NODE_ENV || 'development';
 
-
-
+console.log(`🚀 Starting Pet Care Service Server (${NODE_ENV})`) ; 
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// SSL Configuration - Using self-signed certificates (temporary)
+console.log('🔐 Loading self-signed SSL certificates (temporary configuration)');
+
+const sslDir = path.join(__dirname, '../ssl');
+const sslKeyPath = path.join(sslDir, 'server.key');
+const sslCertPath = path.join(sslDir, 'server.cert');
+
+let httpsOptions = null;
+
+try {
+    // Verify self-signed certificate files exist
+    if (!fs.existsSync(sslKeyPath)) {
+        throw new Error(`SSL private key not found at: ${sslKeyPath}`);
+    }
+    if (!fs.existsSync(sslCertPath)) {
+        throw new Error(`SSL certificate not found at: ${sslCertPath}`);
+    }
+
+    httpsOptions = {
+        key: fs.readFileSync(sslKeyPath),
+        cert: fs.readFileSync(sslCertPath)
+    };
+    
+
+} catch (error) {
+    console.error('❌ Failed to load self-signed SSL certificates:', error.message);
+    console.log('\n🔧 To generate self-signed certificates, run:');
+    console.log('   chmod +x generate_ssl.sh');
+    console.log('   ./generate_ssl.sh');
+    console.log('\n💡 Files should be located at:');
+    console.log(`   Key: ${sslKeyPath}`);
+    console.log(`   Cert: ${sslCertPath}`);
+    process.exit(1);
+}
 
 // Security middleware (should be first)
 app.use(securityMiddleware);
@@ -42,6 +80,16 @@ app.use(express.urlencoded({ extended: true }));
 // Static file serving
 app.use(express.static(path.join(__dirname, '../public')));
 
+// Force HTTPS in production
+if (NODE_ENV === 'production' && httpsOptions) {
+    app.use((req, res, next) => {
+        if (!req.secure && req.get('x-forwarded-proto') !== 'https') {
+            return res.redirect(301, `https://${req.get('host')}${req.url}`);
+        }
+        next();
+    });
+}
+
 // API Routes with specific rate limiting for auth routes
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/profile', authMiddleware, requireEmailVerification, profileRoutes);
@@ -52,11 +100,40 @@ app.use('/api/schedule', authMiddleware, requireFullVerification, scheduleRoutes
 app.use('/api/services', servicesRoutes);  // Public access for browsing services
 app.use('/api/bookings', authMiddleware, requireFullVerification, bookingsRoutes);  // Requires full verification
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.json({
+        success: true,
+        message: 'Pet Care Service is running',
+        secure: req.secure,
+        protocol: req.protocol,
+        environment: NODE_ENV,
+        timestamp: new Date().toISOString()
+    });
+});
 
 // Error handling middleware (should be last)
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-    console.log(`server has started on port: ${PORT}`) ; 
-})
+// Start HTTPS server only
+if (!httpsOptions) {
+    console.error('❌ SSL certificates are required. Server cannot start without HTTPS.');
+    process.exit(1);
+}
+
+https.createServer(httpsOptions, app).listen(HTTPS_PORT, () => {
+    console.log(`🔒 HTTPS Server running on port: ${HTTPS_PORT} (self-signed certificates)`);
+    console.log(`🔗 Secure API: https://localhost:${HTTPS_PORT}/api`);
+    console.log(`🏥 Health check: https://localhost:${HTTPS_PORT}/health`);
+    console.log(`⚠️  Browser warning expected with self-signed certificates`);
+    console.log(`🌐 Access via: https://localhost:${HTTPS_PORT}`);
+    console.log(`🔐 HTTPS-only mode: No HTTP server running`);
+    
+    if (NODE_ENV === 'development') {
+        console.log('\n💡 Development Tips:');
+        console.log('   • Accept browser security warning for self-signed certs');
+        console.log('   • Use "Advanced" → "Proceed to localhost" in browsers');
+        console.log('   • Add certificate exception for testing');
+    }
+});

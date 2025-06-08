@@ -1,7 +1,6 @@
 import express from 'express'
 import db from '../Database_sqlite.js'
-// TODO: Add validation middleware when needed
-// import { validatePetCreation, validatePetUpdate } from '../middleware/validationMiddleware.js'
+import { validatePetCreation, validatePetUpdate } from '../middleware/validationMiddleware.js'
 
 const router = express.Router();
 
@@ -39,7 +38,7 @@ router.get('/', (req, res) => {
 });
 
 // Add a new pet for the authenticated pet owner
-router.post('/', (req, res) => {
+router.post('/', validatePetCreation, (req, res) => {
     try {
         const userId = req.userId;
         const userRole = req.userRole;
@@ -162,7 +161,7 @@ router.get('/:petId', (req, res) => {
 });
 
 // Update a specific pet
-router.put('/:petId', (req, res) => {
+router.put('/:petId', validatePetUpdate, (req, res) => {
     try {
         const userId = req.userId;
         const userRole = req.userRole;

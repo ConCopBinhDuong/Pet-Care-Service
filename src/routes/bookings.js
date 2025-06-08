@@ -1,7 +1,6 @@
 import express from 'express'
 import db from '../Database_sqlite.js'
-// TODO: Add validation middleware when needed
-// import { validateBookingCreation, validateBookingUpdate } from '../middleware/validationMiddleware.js'
+import { validateBookingCreation, validateBookingUpdate } from '../middleware/validationMiddleware.js'
 
 const router = express.Router();
 
@@ -142,7 +141,7 @@ router.get('/:bookingId', (req, res) => {
 });
 
 // Create a new service booking (Reserve service endpoint)
-router.post('/', (req, res) => {
+router.post('/', validateBookingCreation, (req, res) => {
     try {
         const userId = req.userId;
         const userRole = req.userRole;
@@ -256,7 +255,7 @@ router.post('/', (req, res) => {
 });
 
 // Update booking status or details
-router.put('/:bookingId', (req, res) => {
+router.put('/:bookingId', validateBookingUpdate, (req, res) => {
     try {
         const userId = req.userId;
         const userRole = req.userRole;

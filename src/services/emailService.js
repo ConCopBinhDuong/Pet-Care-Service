@@ -236,6 +236,118 @@ class EmailService {
         </html>
         `;
     }
+
+    async sendPasswordResetVerification(email, code, userName) {
+        const mailOptions = {
+            from: process.env.EMAIL_FROM || 'noreply@petcare.com',
+            to: email,
+            subject: 'Password Reset Request - Pet Care Service',
+            html: this.getPasswordResetTemplate(code, userName)
+        };
+
+        try {
+            if (process.env.NODE_ENV === 'production') {
+                const info = await this.transporter.sendMail(mailOptions);
+                console.log('Password reset email sent:', info.messageId);
+                return { success: true, messageId: info.messageId };
+            } else {
+                // Development mode - log to console
+                console.log('\n🔐 Password Reset Verification Code (Development Mode)');
+                console.log('=====================================================');
+                console.log(`To: ${email}`);
+                console.log(`Subject: ${mailOptions.subject}`);
+                console.log(`User: ${userName}`);
+                console.log(`Verification Code: ${code}`);
+                console.log('=====================================================\n');
+                return { success: true, messageId: 'dev-mode-password-reset' };
+            }
+        } catch (error) {
+            console.error('Password reset email sending failed:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    getPasswordResetTemplate(code, userName) {
+        return `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Password Reset Request - Pet Care Service</title>
+            <style>
+                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                .header { background: #ff6b35; color: white; padding: 20px; text-align: center; }
+                .content { padding: 20px; background: #f9f9f9; }
+                .code-box { 
+                    background: white; 
+                    padding: 20px; 
+                    margin: 20px 0; 
+                    border-radius: 5px; 
+                    text-align: center;
+                    border: 2px solid #ff6b35;
+                }
+                .code { 
+                    font-size: 32px; 
+                    font-weight: bold; 
+                    color: #ff6b35; 
+                    letter-spacing: 5px;
+                    font-family: 'Courier New', monospace;
+                }
+                .warning { 
+                    background: #fff3cd; 
+                    border: 1px solid #ffeaa7; 
+                    padding: 15px; 
+                    margin: 20px 0; 
+                    border-radius: 5px;
+                    color: #856404;
+                }
+                .footer { padding: 20px; text-align: center; color: #666; font-size: 14px; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🔐 Password Reset Request</h1>
+                </div>
+                <div class="content">
+                    <h3>Hello ${userName}!</h3>
+                    <p>We received a request to reset your password for your Pet Care Service account.</p>
+                    
+                    <div class="code-box">
+                        <p><strong>Your verification code is:</strong></p>
+                        <div class="code">${code}</div>
+                        <p style="margin-top: 15px; color: #666;">This code expires in <strong>1 minute</strong></p>
+                    </div>
+                    
+                    <div class="warning">
+                        <h4>⚠️ Security Notice:</h4>
+                        <ul style="margin: 10px 0;">
+                            <li>This code is valid for only <strong>1 minute</strong></li>
+                            <li>You have <strong>3 attempts</strong> to enter the code correctly</li>
+                            <li>If you didn't request this reset, please ignore this email</li>
+                            <li>Never share this code with anyone</li>
+                        </ul>
+                    </div>
+                    
+                    <p>Enter this code in the password reset form to verify your identity and set a new password.</p>
+                    
+                    <p><strong>What happens next?</strong></p>
+                    <ol>
+                        <li>Enter the verification code above</li>
+                        <li>Create a new secure password</li>
+                        <li>Log in with your new password</li>
+                    </ol>
+                </div>
+                <div class="footer">
+                    <p>© 2025 Pet Care Service. All rights reserved.</p>
+                    <p>If you didn't request this password reset, please contact our support team immediately.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        `;
+    }
 }
 
 export default new EmailService();

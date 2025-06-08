@@ -17,7 +17,6 @@ db.exec(`
   );
 `);
 
-// Removed verification_codes table - using in-memory verification system instead
 
 db.exec(`
   CREATE TABLE manager (
