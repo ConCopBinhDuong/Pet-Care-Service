@@ -1,0 +1,338 @@
+### Pet Care Service - Service Management API Tests
+### Base URL: http://localhost:8383
+
+###############################################
+# AUTHENTICATION - Get tokens for testing
+###############################################
+
+### 1. Login as Service Provider
+POST http://localhost:8383/api/auth/login
+Content-Type: application/json
+
+{
+    "email": "provider@test.com",
+    "password": "password123"
+}
+
+### Store the provider token from response above and use it below
+@providerToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+### 2. Login as Manager  
+POST http://localhost:8383/api/auth/login
+Content-Type: application/json
+
+{
+    "email": "manager@test.com", 
+    "password": "password123"
+}
+
+### Store the manager token from response above and use it below
+@managerToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+### 3. Login as Pet Owner (for testing authorization)
+POST http://localhost:8383/api/auth/login
+Content-Type: application/json
+
+{
+    "email": "testblacklist@example.com",
+    "password": "testPassword123"
+}
+
+### Store the pet owner token from response above
+@petOwnerToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+###############################################
+# PUBLIC ENDPOINTS (No authentication required)
+###############################################
+
+### 4. Get all public services (approved only)
+GET http://localhost:8383/api/services
+Accept: application/json
+
+### 5. Health check
+GET http://localhost:8383/health
+
+###############################################
+# SERVICE PROVIDER ENDPOINTS
+###############################################
+
+### 6. Submit a new service (Service Provider only)
+POST http://localhost:8383/api/services/submit
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+    "name": "Premium Dog Training",
+    "price": 120,
+    "description": "Professional dog training sessions with certified trainers. Includes basic obedience, socialization, and behavioral correction.",
+    "duration": "2 hours",
+    "type_id": 1,
+    "time_slots": ["09:00", "11:00", "14:00", "16:00", "18:00"]
+}
+
+### 7. Submit another service with different details
+POST http://localhost:8383/api/services/submit
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+    "name": "Cat Grooming Deluxe",
+    "price": 65,
+    "description": "Complete cat grooming service including bath, nail trimming, ear cleaning, and brushing. Perfect for long-haired cats.",
+    "duration": "90 minutes", 
+    "type_id": 1,
+    "time_slots": ["10:00", "13:00", "15:00"]
+}
+
+### 8. Get provider's own services
+GET http://localhost:8383/api/services/my-services
+Authorization: Bearer {{providerToken}}
+Accept: application/json
+
+### 9. Update a pending service (use service ID from submit response)
+PUT http://localhost:8383/api/services/1/update
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+    "name": "Premium Dog Training - Updated",
+    "price": 130,
+    "description": "Enhanced professional dog training sessions with certified trainers. Now includes advanced tricks training!",
+    "duration": "2.5 hours",
+    "time_slots": ["09:00", "11:00", "14:00", "16:00"]
+}
+
+### 10. Try to submit service with missing required fields (should fail)
+POST http://localhost:8383/api/services/submit
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+    "name": "",
+    "price": -10,
+    "description": "Invalid service"
+}
+
+### 11. Try to submit service with invalid price (should fail)
+POST http://localhost:8383/api/services/submit
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+    "name": "Invalid Price Service",
+    "price": -50,
+    "description": "This should fail validation",
+    "duration": "1 hour",
+    "type_id": 1,
+    "time_slots": ["10:00"]
+}
+
+###############################################
+# MANAGER ENDPOINTS
+###############################################
+
+### 12. Get all pending services (Manager only)
+GET http://localhost:8383/api/services/pending-review
+Authorization: Bearer {{managerToken}}
+Accept: application/json
+
+### 13. Approve a service (use service ID from pending list)
+POST http://localhost:8383/api/services/4/review
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+
+{
+    "action": "approve"
+}
+
+### 14. Reject a service with reason
+POST http://localhost:8383/api/services/5/review
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+
+{
+    "action": "reject",
+    "rejection_reason": "Service description is too vague. Please provide more specific details about the training methods and expected outcomes."
+}
+
+### 15. Get manager review summary
+GET http://localhost:8383/api/services/review-summary
+Authorization: Bearer {{managerToken}}
+Accept: application/json
+
+### 16. Try invalid review action (should fail)
+POST http://localhost:8383/api/services/1/review
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+
+{
+    "action": "invalid_action"
+}
+
+### 17. Try to reject without reason (should fail)
+POST http://localhost:8383/api/services/1/review
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+
+{
+    "action": "reject"
+}
+
+###############################################
+# AUTHORIZATION TESTS (Should fail with 403)
+###############################################
+
+### 18. Service Provider trying to access Manager endpoints (should fail)
+GET http://localhost:8383/api/services/pending-review
+Authorization: Bearer {{providerToken}}
+Accept: application/json
+
+### 19. Pet Owner trying to submit service (should fail)
+POST http://localhost:8383/api/services/submit
+Authorization: Bearer {{petOwnerToken}}
+Content-Type: application/json
+
+{
+    "name": "Unauthorized Service",
+    "price": 50,
+    "description": "This should fail",
+    "duration": "1 hour",
+    "type_id": 1,
+    "time_slots": ["10:00"]
+}
+
+### 20. Manager trying to access Provider endpoints (should fail)
+GET http://localhost:8383/api/services/my-services
+Authorization: Bearer {{managerToken}}
+Accept: application/json
+
+### 21. No token provided (should fail with 401)
+POST http://localhost:8383/api/services/submit
+Content-Type: application/json
+
+{
+    "name": "No Auth Service",
+    "price": 30,
+    "description": "Should fail without token",
+    "duration": "1 hour",
+    "type_id": 1,
+    "time_slots": ["10:00"]
+}
+
+###############################################
+# EDGE CASES AND ERROR HANDLING
+###############################################
+
+### 22. Try to update non-existent service
+PUT http://localhost:8383/api/services/9999/update
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+    "name": "Non-existent Service",
+    "price": 100,
+    "description": "This service doesn't exist",
+    "duration": "1 hour",
+    "time_slots": ["10:00"]
+}
+
+### 23. Try to review non-existent service
+POST http://localhost:8383/api/services/9999/review
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+
+{
+    "action": "approve"
+}
+
+### 24. Try to update already approved service (should fail)
+PUT http://localhost:8383/api/services/1/update
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+    "name": "Trying to update approved service",
+    "price": 200,
+    "description": "This should fail if service is already approved",
+    "duration": "1 hour",
+    "time_slots": ["10:00"]
+}
+
+### 25. Submit service with very long description (test validation limits if any)
+POST http://localhost:8383/api/services/submit
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+    "name": "Service with Long Description",
+    "price": 75,
+    "description": "This is a very long description that tests the validation limits of our service submission system. It contains detailed information about the service offerings, methodologies, expected outcomes, pricing structure, time commitments, and various other aspects that might be relevant to potential customers who are considering this particular service for their beloved pets.",
+    "duration": "1.5 hours",
+    "type_id": 1,
+    "time_slots": ["09:00", "14:00"]
+}
+
+###############################################
+# VERIFICATION TESTS
+###############################################
+
+### 26. Verify public services updated after approval
+GET http://localhost:8383/api/services
+Accept: application/json
+
+### 27. Verify provider statistics updated
+GET http://localhost:8383/api/services/my-services
+Authorization: Bearer {{providerToken}}
+Accept: application/json
+
+### 28. Verify manager stats updated
+GET http://localhost:8383/api/services/review-summary
+Authorization: Bearer {{managerToken}}
+Accept: application/json
+
+###############################################
+# BATCH TESTING - Submit multiple services
+###############################################
+
+### 29. Submit Pet Walking Service
+POST http://localhost:8383/api/services/submit
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+    "name": "Daily Pet Walking Premium",
+    "price": 35,
+    "description": "Professional pet walking service with GPS tracking, photo updates, and detailed activity reports.",
+    "duration": "45 minutes",
+    "type_id": 2,
+    "time_slots": ["08:00", "12:00", "17:00", "19:00"]
+}
+
+### 30. Submit Veterinary Service
+POST http://localhost:8383/api/services/submit
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+    "name": "Mobile Veterinary Checkup",
+    "price": 150,
+    "description": "Comprehensive veterinary examination at your home. Includes basic health assessment, vaccination updates, and health recommendations.",
+    "duration": "60 minutes",
+    "type_id": 3,
+    "time_slots": ["10:00", "14:00", "16:00"]
+}
+
+###############################################
+# TESTING NOTES:
+# 1. Start server first: node simple_server_test.js
+# 2. Replace token variables with actual tokens from login responses
+# 3. Update service IDs based on actual responses
+# 4. Check server console for detailed logs
+# 5. Expected responses:
+#    - 200: Success
+#    - 201: Created
+#    - 400: Bad Request (validation errors)
+#    - 401: Unauthorized (no token)
+#    - 403: Forbidden (wrong role)
+#    - 404: Not Found
+###############################################

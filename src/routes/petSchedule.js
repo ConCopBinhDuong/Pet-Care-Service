@@ -7,8 +7,8 @@ const router = express.Router();
 // Get all schedules for the authenticated pet owner
 router.get('/', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
 
         // Only pet owners can access this endpoint
         if (userRole !== 'Pet owner') {

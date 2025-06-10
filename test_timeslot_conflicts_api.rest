@@ -1,0 +1,208 @@
+### Timeslot Conflict Testing via REST API
+### Testing the new timeslot conflict detection and handling
+
+@baseUrl = http://localhost:3000/api
+
+### 1. Register a Service Provider
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+    "name": "Test Provider",
+    "email": "provider@test.com",
+    "password": "TestPassword123!",
+    "gender": "Male",
+    "role": "Service provider",
+    "phone": "+84987654321",
+    "businessName": "Test Pet Services",
+    "description": "Professional pet care services",
+    "address": "456 Business Avenue",
+    "website": "https://testpetservices.com"
+}
+
+### 2. Register a Pet Owner  
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+    "name": "Test Pet Owner",
+    "email": "petowner@test.com", 
+    "password": "TestPassword123!",
+    "gender": "Female",
+    "role": "Pet owner",
+    "phone": "+84901234567",
+    "city": "Ho Chi Minh City",
+    "address": "123 Test Street"
+}
+
+### 3. Register a Manager
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+    "name": "Test Manager",
+    "email": "manager@test.com",
+    "password": "TestPassword123!",
+    "gender": "Male", 
+    "role": "Manager"
+}
+
+### 4. Login as Service Provider
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "email": "provider@test.com",
+    "password": "TestPassword123!"
+}
+
+### 5. Login as Pet Owner
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "email": "petowner@test.com",
+    "password": "TestPassword123!"
+}
+
+### 6. Login as Manager
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "email": "manager@test.com",
+    "password": "TestPassword123!"
+}
+
+### 7. Get Service Types (use provider token)
+GET {{baseUrl}}/services/types
+
+### 8. Submit a Service (use provider token)
+POST {{baseUrl}}/services/submit
+Authorization: Bearer YOUR_PROVIDER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "name": "Premium Pet Grooming",
+    "price": 50,
+    "description": "Complete grooming service including bath, cut, and nail trimming",
+    "duration": "2 hours",
+    "typeid": 1,
+    "timeSlots": ["09:00", "10:00", "11:00", "14:00", "15:00", "16:00"]
+}
+
+### 9. Approve the Service (use manager token)
+POST {{baseUrl}}/services/1/review
+Authorization: Bearer YOUR_MANAGER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "action": "approve"
+}
+
+### 10. Add a Pet (use pet owner token)
+POST {{baseUrl}}/pets
+Authorization: Bearer YOUR_PETOWNER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "name": "Buddy",
+    "breed": "Golden Retriever",
+    "description": "Friendly and energetic dog",
+    "picture": "fake_image_data",
+    "age": 3,
+    "dob": "2022-01-15"
+}
+
+### 11. Create a Booking for timeslot 10:00 (use pet owner token)
+POST {{baseUrl}}/bookings
+Authorization: Bearer YOUR_PETOWNER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "serviceId": 1,
+    "slot": "10:00",
+    "servedate": "2025-06-15",
+    "payment_method": "Credit Card",
+    "petIds": [1]
+}
+
+### 12. Create another Booking for timeslot 11:00 (use pet owner token)
+POST {{baseUrl}}/bookings
+Authorization: Bearer YOUR_PETOWNER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "serviceId": 1,
+    "slot": "11:00", 
+    "servedate": "2025-06-20",
+    "payment_method": "Cash",
+    "petIds": [1]
+}
+
+### 13. [CONFLICT TEST] Try to remove booked timeslots (should FAIL with 409)
+PUT {{baseUrl}}/services/1/update-approved
+Authorization: Bearer YOUR_PROVIDER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "timeSlots": ["09:00", "14:00", "15:00", "16:00"]
+}
+
+### Expected Result: 409 Conflict with detailed error message showing:
+### - Which timeslots have conflicts (10:00, 11:00)
+### - Booking details for each conflict
+### - Customer information
+### - Suggestions for resolution
+
+### 14. [SUCCESS TEST] Add new timeslots without removing booked ones (should SUCCEED)
+PUT {{baseUrl}}/services/1/update-approved
+Authorization: Bearer YOUR_PROVIDER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "timeSlots": ["09:00", "10:00", "11:00", "12:00", "14:00", "15:00", "16:00", "17:00"]
+}
+
+### Expected Result: 200 Success
+
+### 15. [SUCCESS TEST] Update only description (should SUCCEED)
+PUT {{baseUrl}}/services/1/update-approved
+Authorization: Bearer YOUR_PROVIDER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "description": "Updated: Complete grooming service with premium treatment"
+}
+
+### Expected Result: 200 Success
+
+### 16. Get service details to verify current state
+GET {{baseUrl}}/services/1
+Authorization: Bearer YOUR_PROVIDER_TOKEN_HERE
+
+### 17. [RESOLUTION TEST] Cancel one booking to test conflict resolution
+PUT {{baseUrl}}/bookings/1/cancel
+Authorization: Bearer YOUR_PETOWNER_TOKEN_HERE
+
+### 18. [SUCCESS TEST] Now try removing the cancelled timeslot (should SUCCEED)
+PUT {{baseUrl}}/services/1/update-approved
+Authorization: Bearer YOUR_PROVIDER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "timeSlots": ["09:00", "11:00", "12:00", "14:00", "15:00", "16:00", "17:00"]
+}
+
+### Expected Result: 200 Success (10:00 timeslot removed successfully)
+
+### 19. [FINAL CONFLICT TEST] Try to remove remaining booked timeslot (should FAIL)
+PUT {{baseUrl}}/services/1/update-approved
+Authorization: Bearer YOUR_PROVIDER_TOKEN_HERE
+Content-Type: application/json
+
+{
+    "timeSlots": ["09:00", "12:00", "14:00", "15:00", "16:00", "17:00"]
+}
+
+### Expected Result: 409 Conflict (11:00 still has active booking)

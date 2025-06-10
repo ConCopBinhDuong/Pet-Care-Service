@@ -1,0 +1,92 @@
+### Timeslot Conflict Testing for Pet Care Service
+### This file tests the new timeslot conflict detection and handling
+
+@baseUrl = http://localhost:3000/api
+@providerToken = 
+@petOwnerToken = 
+@serviceId = 
+
+### 1. Login as Service Provider to get token
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "email": "provider@test.com",
+    "password": "TestPassword123!"
+}
+
+### 2. Login as Pet Owner to create bookings
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "email": "petowner@test.com", 
+    "password": "TestPassword123!"
+}
+
+### 3. Get available services to find a service ID
+GET {{baseUrl}}/services
+Authorization: Bearer {{providerToken}}
+
+### 4. Create a test booking for a specific timeslot (use actual serviceId)
+POST {{baseUrl}}/bookings
+Authorization: Bearer {{petOwnerToken}}
+Content-Type: application/json
+
+{
+    "serviceId": {{serviceId}},
+    "slot": "10:00",
+    "servedate": "2025-06-15",
+    "payment_method": "Credit Card",
+    "petIds": [1]
+}
+
+### 5. Try to update service timeslots - removing the booked slot (should fail with conflict)
+PUT {{baseUrl}}/services/{{serviceId}}/update-approved
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+    "timeSlots": ["09:00", "11:00", "14:00", "15:00"]
+}
+
+### 6. Try to update service timeslots - keeping the booked slot but adding new ones (should succeed)
+PUT {{baseUrl}}/services/{{serviceId}}/update-approved
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+    "timeSlots": ["09:00", "10:00", "11:00", "14:00", "15:00", "16:00"]
+}
+
+### 7. Update only description (should succeed)
+PUT {{baseUrl}}/services/{{serviceId}}/update-approved
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+    "description": "Updated description - testing conflict resolution"
+}
+
+### 8. Get service details to verify timeslots
+GET {{baseUrl}}/services/{{serviceId}}
+Authorization: Bearer {{providerToken}}
+
+### 9. Cancel the booking to test removal after no conflicts
+PUT {{baseUrl}}/bookings/1/cancel
+Authorization: Bearer {{petOwnerToken}}
+
+### 10. Now try removing the timeslot again (should succeed after cancellation)
+PUT {{baseUrl}}/services/{{serviceId}}/update-approved
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+    "timeSlots": ["09:00", "11:00", "14:00", "15:00"]
+}
+
+### Expected Results:
+### Step 5: Should return 409 Conflict with detailed booking information
+### Step 6: Should return 200 Success 
+### Step 7: Should return 200 Success
+### Step 10: Should return 200 Success (after booking cancellation)

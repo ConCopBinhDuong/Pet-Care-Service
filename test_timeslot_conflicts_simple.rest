@@ -1,0 +1,91 @@
+### Quick Timeslot Conflict Testing
+### This assumes test data has been seeded via: node seed_test_data.js
+
+@baseUrl = https://localhost:8443/api
+@managerToken = 
+@providerToken = 
+@petOwnerToken = 
+
+### STEP 0: Seed test data first by running:
+### node seed_test_data.js
+
+### 1. Login as Manager
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "email": "admin@petcare.com",
+    "password": "TestPassword123!"
+}
+
+### 2. Login as Service Provider
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "email": "provider@test.com",
+    "password": "TestPassword123!"
+}
+
+### 3. Login as Pet Owner
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "email": "petowner@test.com",
+    "password": "TestPassword123!"
+}
+
+### 4. Create Booking (creates conflict scenario)
+POST {{baseUrl}}/bookings
+Authorization: Bearer {{petOwnerToken}}
+Content-Type: application/json
+
+{
+    "serviceId": 1,
+    "slot": "10:00",
+    "servedate": "2025-06-15",
+    "payment_method": "Credit Card",
+    "petIds": [1]
+}
+
+### 5. 🚨 TEST CONFLICT: Try removing booked timeslot (SHOULD FAIL with 409)
+PUT {{baseUrl}}/services/1/update-approved
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+    "timeSlots": ["09:00", "11:00", "14:00", "15:00", "16:00"]
+}
+
+### Expected: 409 Conflict with detailed error message
+
+### 6. ✅ TEST SUCCESS: Keep booked slot, add new ones (SHOULD SUCCEED)
+PUT {{baseUrl}}/services/1/update-approved
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+    "timeSlots": ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00"]
+}
+
+### Expected: 200 Success
+
+### 7. Verify service state
+GET {{baseUrl}}/services/1
+Authorization: Bearer {{providerToken}}
+
+### 8. Cancel booking to test resolution
+PUT {{baseUrl}}/bookings/1/cancel
+Authorization: Bearer {{petOwnerToken}}
+
+### 9. Now try removing the cancelled timeslot (SHOULD SUCCEED)
+PUT {{baseUrl}}/services/1/update-approved
+Authorization: Bearer {{providerToken}}
+Content-Type: application/json
+
+{
+    "timeSlots": ["09:00", "11:00", "13:00", "14:00", "15:00", "16:00"]
+}
+
+### Expected: 200 Success

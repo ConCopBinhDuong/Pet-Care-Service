@@ -1,0 +1,73 @@
+###############################################
+# LOGIN VALIDATION TESTS
+###############################################
+
+### 1. Valid login with email
+POST http://localhost:8383/api/auth/login
+Content-Type: application/json
+
+{
+    "email": "provider@test.com",
+    "password": "password123"
+}
+
+### 2. Login without email (should fail)
+POST http://localhost:8383/api/auth/login
+Content-Type: application/json
+
+{
+    "password": "password123"
+}
+
+### 3. Login with empty email (should fail)
+POST http://localhost:8383/api/auth/login
+Content-Type: application/json
+
+{
+    "email": "",
+    "password": "password123"
+}
+
+### 4. Login with invalid email format (should fail)
+POST http://localhost:8383/api/auth/login
+Content-Type: application/json
+
+{
+    "email": "invalid-email",
+    "password": "password123"
+}
+
+### 5. Login without password (should fail)
+POST http://localhost:8383/api/auth/login
+Content-Type: application/json
+
+{
+    "email": "provider@test.com"
+}
+
+### 6. Login with empty password (should fail)
+POST http://localhost:8383/api/auth/login
+Content-Type: application/json
+
+{
+    "email": "provider@test.com",
+    "password": ""
+}
+
+### 7. Login with non-existent email (should fail)
+POST http://localhost:8383/api/auth/login
+Content-Type: application/json
+
+{
+    "email": "nonexistent@test.com",
+    "password": "password123"
+}
+
+### 8. Login with wrong password (should fail)
+POST http://localhost:8383/api/auth/login
+Content-Type: application/json
+
+{
+    "email": "provider@test.com",
+    "password": "wrongpassword"
+}

@@ -12,7 +12,6 @@ db.exec(`
     gender TEXT CHECK(gender IN ('Male', 'Female', 'Other')),
     role TEXT CHECK(role IN ('Pet owner', 'Service provider', 'Manager')),
     email_verified INTEGER DEFAULT 0 CHECK(email_verified IN (0, 1)),
-    phone_verified INTEGER DEFAULT 0 CHECK(phone_verified IN (0, 1)),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `);
@@ -166,8 +165,14 @@ db.exec(`
     license BLOB,
     typeid INTEGER,
     providerid INTEGER,
+    status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
+    submission_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    review_date DATETIME,
+    reviewed_by INTEGER,
+    rejection_reason TEXT,
     FOREIGN KEY(typeid) REFERENCES servicetype(typeid) ON UPDATE CASCADE ON DELETE CASCADE,
-    FOREIGN KEY(providerid) REFERENCES serviceprovider(id) ON UPDATE CASCADE ON DELETE CASCADE
+    FOREIGN KEY(providerid) REFERENCES serviceprovider(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY(reviewed_by) REFERENCES manager(id) ON UPDATE CASCADE ON DELETE SET NULL
   );
 `);
 
@@ -217,7 +222,7 @@ db.exec(`
 db.exec(`
   CREATE TABLE service_review (
     bookid INTEGER PRIMARY KEY,
-    stars INTEGER,
+    stars INTEGER ,
     comment TEXT,
     FOREIGN KEY(bookid) REFERENCES booking(bookid) ON UPDATE CASCADE ON DELETE CASCADE
   );
@@ -252,6 +257,27 @@ db.exec(`
     userid INTEGER,
     FOREIGN KEY(userid) REFERENCES users(userid) ON UPDATE CASCADE ON DELETE CASCADE
   );
+`);
+
+db.exec(`
+  CREATE TABLE token_blacklist (
+    jti TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    reason TEXT,
+    created_at INTEGER DEFAULT (strftime('%s', 'now')),
+    FOREIGN KEY(user_id) REFERENCES users(userid) ON UPDATE CASCADE ON DELETE CASCADE
+  );
+`);
+
+db.exec(`
+  CREATE INDEX idx_token_blacklist_expires 
+  ON token_blacklist(expires_at);
+`);
+
+db.exec(`
+  CREATE INDEX idx_token_blacklist_user_id 
+  ON token_blacklist(user_id);
 `);
 
 export default db;

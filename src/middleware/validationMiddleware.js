@@ -2,6 +2,8 @@
  * Validation middleware for request data
  */
 
+import db from '../Database_sqlite.js';
+
 /**
  * Validate Vietnamese phone numbers
  * Supports formats: +84xxxxxxxxx, 84xxxxxxxxx, 0xxxxxxxxx
@@ -102,14 +104,72 @@ export const validateRegistration = (req, res, next) => {
 };
 
 /**
+ * Pre-verification registration validation middleware
+ * Validates registration data before starting verification process
+ */
+export const validatePreVerificationRegistration = (req, res, next) => {
+    const { username, email, password, gender, role, phone, bussiness_name } = req.body;
+    const errors = [];
+
+    // Required fields
+    if (!username || username.trim().length < 2) {
+        errors.push('Username is required and must be at least 2 characters');
+    }
+
+    if (!email) {
+        errors.push('Email is required');
+    } else if (!validateEmail(email)) {
+        errors.push('Invalid email format');
+    }
+
+    if (!password) {
+        errors.push('Password is required');
+    } else if (!validatePassword(password)) {
+        errors.push('Password must be at least 8 characters and contain letters and numbers');
+    }
+
+    if (!gender || !['Male', 'Female', 'Other'].includes(gender)) {
+        errors.push('Gender must be Male, Female, or Other');
+    }
+
+    if (!role || !['Pet owner', 'Service provider', 'Manager'].includes(role)) {
+        errors.push('Role must be Pet owner, Service provider, or Manager');
+    }
+
+    // Role-specific validation
+    if (role === 'Service provider') {
+        if (!bussiness_name || bussiness_name.trim().length < 2) {
+            errors.push('Business name is required for service providers');
+        }
+    }
+
+    // Phone validation (optional for all roles)
+    if (phone && !validateVietnamesePhone(phone)) {
+        errors.push('Invalid Vietnamese phone number format');
+    }
+
+    if (errors.length > 0) {
+        return res.status(400).json({
+            success: false,
+            error: 'Validation failed',
+            details: errors
+        });
+    }
+
+    next();
+};
+
+/**
  * Login validation middleware
  */
 export const validateLogin = (req, res, next) => {
-    const { username, password } = req.body;
+    const { email, password } = req.body;
     const errors = [];
 
-    if (!username || username.trim().length === 0) {
-        errors.push('Username or email is required');
+    if (!email || email.trim().length === 0) {
+        errors.push('Email is required');
+    } else if (!validateEmail(email)) {
+        errors.push('Invalid email format');
     }
 
     if (!password || password.trim().length === 0) {
@@ -137,6 +197,64 @@ export const validateVerificationCode = (req, res, next) => {
         return res.status(400).json({
             success: false,
             error: 'Verification code must be 6 digits'
+        });
+    }
+
+    next();
+};
+
+/**
+ * Verification session validation middleware
+ */
+export const validateVerificationSession = (req, res, next) => {
+    const { sessionId } = req.body;
+    
+    if (!sessionId || typeof sessionId !== 'string') {
+        return res.status(400).json({
+            success: false,
+            error: 'Valid session ID is required'
+        });
+    }
+
+    next();
+};
+
+/**
+ * Email verification step validation middleware
+ */
+export const validateEmailVerificationStep = (req, res, next) => {
+    const { sessionId, emailCode } = req.body;
+    const errors = [];
+
+    if (!sessionId || typeof sessionId !== 'string') {
+        errors.push('Valid session ID is required');
+    }
+
+    if (!emailCode || !/^\d{6}$/.test(emailCode)) {
+        errors.push('Email verification code must be 6 digits');
+    }
+
+    if (errors.length > 0) {
+        return res.status(400).json({
+            success: false,
+            error: 'Validation failed',
+            details: errors
+        });
+    }
+
+    next();
+};
+
+/**
+ * Complete registration validation middleware
+ */
+export const validateCompleteRegistration = (req, res, next) => {
+    const { sessionId } = req.body;
+    
+    if (!sessionId || typeof sessionId !== 'string') {
+        return res.status(400).json({
+            success: false,
+            error: 'Valid session ID is required'
         });
     }
 
@@ -822,4 +940,410 @@ export const validateScheduleUpdate = (req, res, next) => {
     }
 
     next();
+};
+
+/**
+ * Validate review creation data
+ */
+export const validateReviewCreation = (req, res, next) => {
+    const { stars, comment } = req.body;
+    const errors = [];
+
+    // Required fields validation
+    if (stars === undefined || stars === null) {
+        errors.push('Rating (stars) is required');
+    } else if (!Number.isInteger(stars) || stars < 1 || stars > 5) {
+        errors.push('Rating must be an integer between 1 and 5');
+    }
+
+    // Optional fields validation
+    if (comment !== undefined && comment !== null) {
+        if (typeof comment !== 'string') {
+            errors.push('Comment must be a string');
+        } else if (comment.trim().length > 1000) {
+            errors.push('Comment must be 1000 characters or less');
+        }
+    }
+
+    if (errors.length > 0) {
+        return res.status(400).json({
+            success: false,
+            error: 'Validation failed',
+            details: errors
+        });
+    }
+
+    next();
+};
+
+/**
+ * Validate review update data
+ */
+export const validateReviewUpdate = (req, res, next) => {
+    const { stars, comment } = req.body;
+    const errors = [];
+
+    // At least one field must be provided for update
+    if (stars === undefined && comment === undefined) {
+        errors.push('At least one field (stars or comment) must be provided for update');
+    }
+
+    // Validate stars if provided
+    if (stars !== undefined) {
+        if (!Number.isInteger(stars) || stars < 1 || stars > 5) {
+            errors.push('Rating must be an integer between 1 and 5');
+        }
+    }
+
+    // Validate comment if provided
+    if (comment !== undefined && comment !== null) {
+        if (typeof comment !== 'string') {
+            errors.push('Comment must be a string');
+        } else if (comment.trim().length > 1000) {
+            errors.push('Comment must be 1000 characters or less');
+        }
+    }
+
+    if (errors.length > 0) {
+        return res.status(400).json({
+            success: false,
+            error: 'Validation failed',
+            details: errors
+        });
+    }
+
+    next();
+};
+
+/**
+ * Validate service report creation data
+ */
+export const validateReportCreation = (req, res, next) => {
+    const { text, image } = req.body;
+    const errors = [];
+
+    // Text is required and must not be empty
+    if (!text || typeof text !== 'string' || text.trim().length === 0) {
+        errors.push('Report text is required and cannot be empty');
+    } else if (text.trim().length > 2000) {
+        errors.push('Report text must be 2000 characters or less');
+    }
+
+    // Image is optional but if provided, must be valid base64 or URL
+    if (image !== null && image !== undefined) {
+        if (typeof image !== 'string') {
+            errors.push('Image must be a string (base64 or URL)');
+        } else if (image.length > 0 && !image.startsWith('data:image/') && !image.startsWith('http')) {
+            errors.push('Image must be a valid base64 data URL or HTTP URL');
+        }
+    }
+
+    if (errors.length > 0) {
+        return res.status(400).json({
+            success: false,
+            error: 'Validation failed',
+            details: errors
+        });
+    }
+
+    next();
+};
+
+/**
+ * Validate service report update data
+ */
+export const validateReportUpdate = (req, res, next) => {
+    const { text, image } = req.body;
+    const errors = [];
+
+    // At least one field must be provided for update
+    if (text === undefined && image === undefined) {
+        errors.push('At least one field (text or image) must be provided for update');
+    }
+
+    // Validate text if provided
+    if (text !== undefined) {
+        if (!text || typeof text !== 'string' || text.trim().length === 0) {
+            errors.push('Report text cannot be empty if provided');
+        } else if (text.trim().length > 2000) {
+            errors.push('Report text must be 2000 characters or less');
+        }
+    }
+
+    // Validate image if provided
+    if (image !== undefined && image !== null) {
+        if (typeof image !== 'string') {
+            errors.push('Image must be a string (base64 or URL)');
+        } else if (image.length > 0 && !image.startsWith('data:image/') && !image.startsWith('http')) {
+            errors.push('Image must be a valid base64 data URL or HTTP URL');
+        }
+    }
+
+    if (errors.length > 0) {
+        return res.status(400).json({
+            success: false,
+            error: 'Validation failed',
+            details: errors
+        });
+    }
+
+    next();
+};
+
+/**
+ * Service submission validation middleware
+ */
+export const validateServiceSubmission = (req, res, next) => {
+    const { name, price, description, duration, typeid } = req.body;
+    const errors = [];
+
+    // Validate service name
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+        errors.push('Service name is required and cannot be empty');
+    } else if (name.trim().length < 3) {
+        errors.push('Service name must be at least 3 characters long');
+    } else if (name.trim().length > 100) {
+        errors.push('Service name cannot exceed 100 characters');
+    }
+
+    // Validate price
+    if (!price && price !== 0) {
+        errors.push('Service price is required');
+    } else if (typeof price !== 'number' || isNaN(price)) {
+        errors.push('Service price must be a valid number');
+    } else if (price < 0) {
+        errors.push('Service price cannot be negative');
+    } else if (price > 10000) {
+        errors.push('Service price cannot exceed $10,000');
+    }
+
+    // Validate description
+    if (!description || typeof description !== 'string' || description.trim().length === 0) {
+        errors.push('Service description is required and cannot be empty');
+    } else if (description.trim().length < 10) {
+        errors.push('Service description must be at least 10 characters long');
+    } else if (description.trim().length > 1000) {
+        errors.push('Service description cannot exceed 1000 characters');
+    }
+
+    // Validate duration
+    if (!duration || typeof duration !== 'string' || duration.trim().length === 0) {
+        errors.push('Service duration is required and cannot be empty');
+    } else if (duration.trim().length > 50) {
+        errors.push('Service duration cannot exceed 50 characters');
+    }
+
+    // Validate service type ID
+    if (!typeid && typeid !== 0) {
+        errors.push('Service type ID is required');
+    } else if (typeof typeid !== 'number' || isNaN(typeid) || typeid <= 0) {
+        errors.push('Service type ID must be a valid positive number');
+    }
+
+    // Validate time slots if provided
+    if (req.body.timeSlots) {
+        const { timeSlots } = req.body;
+        if (!Array.isArray(timeSlots)) {
+            errors.push('Time slots must be an array');
+        } else if (timeSlots.length === 0) {
+            errors.push('At least one time slot is required');
+        } else {
+            const timeSlotRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+            timeSlots.forEach((slot, index) => {
+                if (typeof slot !== 'string' || !timeSlotRegex.test(slot)) {
+                    errors.push(`Time slot ${index + 1} must be in valid HH:MM format (24-hour)`);
+                }
+            });
+            
+            // Check for duplicate slots
+            const uniqueSlots = [...new Set(timeSlots)];
+            if (uniqueSlots.length !== timeSlots.length) {
+                errors.push('Duplicate time slots are not allowed');
+            }
+        }
+    }
+
+    if (errors.length > 0) {
+        return res.status(400).json({
+            success: false,
+            error: 'Validation failed',
+            details: errors
+        });
+    }
+
+    next();
+};
+
+/**
+ * Service approval validation middleware
+ */
+export const validateServiceApproval = (req, res, next) => {
+    const { action, rejectionReason } = req.body;
+    const errors = [];
+
+    // Validate action
+    if (!action || typeof action !== 'string') {
+        errors.push('Action is required and must be a string');
+    } else if (!['approve', 'reject'].includes(action.toLowerCase())) {
+        errors.push('Action must be either "approve" or "reject"');
+    }
+
+    // Validate rejection reason if action is reject
+    if (action && action.toLowerCase() === 'reject') {
+        if (!rejectionReason || typeof rejectionReason !== 'string' || rejectionReason.trim().length === 0) {
+            errors.push('Rejection reason is required when rejecting a service');
+        } else if (rejectionReason.trim().length < 10) {
+            errors.push('Rejection reason must be at least 10 characters long');
+        } else if (rejectionReason.trim().length > 500) {
+            errors.push('Rejection reason cannot exceed 500 characters');
+        }
+    }
+
+    if (errors.length > 0) {
+        return res.status(400).json({
+            success: false,
+            error: 'Validation failed',
+            details: errors
+        });
+    }
+
+    next();
+};
+
+/**
+ * Service approved update validation middleware
+ * For updating approved services - more restrictive than pending updates
+ */
+export const validateApprovedServiceUpdate = (req, res, next) => {
+    const { description, timeSlots } = req.body;
+    const errors = [];
+
+    // Only allow description and timeSlots to be updated for approved services
+    const allowedFields = ['description', 'timeSlots'];
+    const providedFields = Object.keys(req.body);
+    
+    const invalidFields = providedFields.filter(field => !allowedFields.includes(field));
+    if (invalidFields.length > 0) {
+        errors.push(`Only description and timeSlots can be updated for approved services. Invalid fields: ${invalidFields.join(', ')}`);
+    }
+
+    // At least one field must be provided
+    if (!description && !timeSlots) {
+        errors.push('At least one field (description or timeSlots) must be provided for update');
+    }
+
+    // Validate description if provided
+    if (description !== undefined) {
+        if (typeof description !== 'string' || description.trim().length === 0) {
+            errors.push('Service description cannot be empty');
+        } else if (description.trim().length < 10) {
+            errors.push('Service description must be at least 10 characters long');
+        } else if (description.trim().length > 1000) {
+            errors.push('Service description cannot exceed 1000 characters');
+        }
+    }
+
+    // Validate time slots if provided
+    if (timeSlots !== undefined) {
+        if (!Array.isArray(timeSlots)) {
+            errors.push('Time slots must be an array');
+        } else if (timeSlots.length === 0) {
+            errors.push('At least one time slot is required');
+        } else {
+            const timeSlotRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+            timeSlots.forEach((slot, index) => {
+                if (typeof slot !== 'string' || !timeSlotRegex.test(slot)) {
+                    errors.push(`Time slot ${index + 1} must be in valid HH:MM format (24-hour)`);
+                }
+            });
+            
+            // Check for duplicate slots
+            const uniqueSlots = [...new Set(timeSlots)];
+            if (uniqueSlots.length !== timeSlots.length) {
+                errors.push('Duplicate time slots are not allowed');
+            }
+        }
+    }
+
+    if (errors.length > 0) {
+        return res.status(400).json({
+            success: false,
+            error: 'Validation failed',
+            details: errors
+        });
+    }
+
+    next();
+};
+
+/**
+ * Validate timeslot updates for booking conflicts (for approved services)
+ */
+export const validateTimeslotConflicts = (req, res, next) => {
+    const { timeSlots } = req.body;
+    
+    // Only validate if timeSlots are being updated
+    if (timeSlots === undefined) {
+        return next();
+    }
+
+    const serviceId = parseInt(req.params.id);
+    
+    if (isNaN(serviceId)) {
+        return res.status(400).json({
+            success: false,
+            error: 'Invalid service ID'
+        });
+    }
+
+    try {
+        // Get existing timeslots
+        const existingTimeSlotsStmt = db.prepare(`
+            SELECT slot FROM timeslot WHERE serviceid = ?
+        `);
+        const existingSlots = existingTimeSlotsStmt.all(serviceId).map(ts => ts.slot);
+        
+        // Find slots that would be removed
+        const slotsToRemove = existingSlots.filter(slot => !timeSlots.includes(slot));
+        
+        if (slotsToRemove.length > 0) {
+            // Check for future bookings on slots to be removed
+            const checkFutureBookingsStmt = db.prepare(`
+                SELECT COUNT(*) as count 
+                FROM booking 
+                WHERE svid = ? AND slot = ? 
+                AND servedate >= date('now') 
+                AND status NOT IN ('cancelled', 'completed')
+            `);
+            
+            const conflictingSlots = [];
+            slotsToRemove.forEach(slot => {
+                const result = checkFutureBookingsStmt.get(serviceId, slot);
+                if (result.count > 0) {
+                    conflictingSlots.push({
+                        slot: slot,
+                        futureBookings: result.count
+                    });
+                }
+            });
+            
+            if (conflictingSlots.length > 0) {
+                return res.status(409).json({
+                    success: false,
+                    error: 'Timeslot conflict detected',
+                    message: 'Cannot remove timeslots that have future active bookings',
+                    conflicts: conflictingSlots,
+                    suggestion: 'Keep existing timeslots with bookings or wait until bookings are completed'
+                });
+            }
+        }
+
+        next();
+    } catch (error) {
+        console.error('Error validating timeslot conflicts:', error);
+        return res.status(500).json({
+            success: false,
+            error: 'Internal server error during conflict validation'
+        });
+    }
 };

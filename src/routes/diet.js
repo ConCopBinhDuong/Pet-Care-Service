@@ -7,8 +7,8 @@ const router = express.Router();
 // Get all diets for a specific pet
 router.get('/pet/:petId', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const petId = parseInt(req.params.petId);
 
         // Only pet owners can access this endpoint

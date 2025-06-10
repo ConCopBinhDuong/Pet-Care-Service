@@ -1,0 +1,160 @@
+### VERIFICATION SYSTEM API TEST ENDPOINTS
+### Complete End-to-End Testing for Pet Care Service Backend
+### Run these tests with VS Code REST Client extension or similar tool
+
+@baseUrl = https://localhost:8443
+@apiUrl = {{baseUrl}}/api
+
+### Test Environment Variables
+@testEmail = test.verification@example.com
+@testPhone = +84901234567
+@testPassword = SecureTestPass123!
+
+### Working Session ID (from manual test): ec1a7541-f455-44ec-ad64-b084926336b9
+### Working Email Code: 393542
+### Working Phone Code: 718698
+
+###
+### 1. HEALTH CHECK - Verify server is running
+GET {{baseUrl}}/health
+
+###
+### 2. START REGISTRATION - Should succeed and return session ID
+POST {{apiUrl}}/auth/start-verification
+Content-Type: application/json
+
+{
+  "email": "{{testEmail}}",
+  "phone": "{{testPhone}}",
+  "password": "{{testPassword}}",
+  "username": "testverificationuser",
+  "gender": "Male",
+  "role": "Pet owner",
+  "city": "Ho Chi Minh City",
+  "address": "123 Test Street"
+}
+
+###
+### 3. CHECK VERIFICATION STATUS - Should show incomplete verification
+POST {{apiUrl}}/auth/check-verification-status
+Content-Type: application/json
+
+{
+  "email": "{{testEmail}}"
+}
+
+###
+### 4. ATTEMPT LOGIN BEFORE VERIFICATION - Should fail with 403
+POST {{apiUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{testEmail}}",
+  "password": "{{testPassword}}"
+}
+
+###
+### 5. RESTART VERIFICATION PROCESS - Should work for existing incomplete user
+POST {{apiUrl}}/auth/restart-verification
+Content-Type: application/json
+
+{
+  "email": "{{testEmail}}",
+  "password": "{{testPassword}}"
+}
+
+###
+### 6. ADMIN: VIEW INCOMPLETE REGISTRATIONS (requires manager role)
+GET {{apiUrl}}/auth/admin/incomplete-registrations
+Authorization: Bearer INSERT_MANAGER_TOKEN_HERE
+
+###
+### 7. ADMIN: FORCE COMPLETE VERIFICATION (requires manager role)
+POST {{apiUrl}}/auth/admin/force-complete-verification
+Content-Type: application/json
+Authorization: Bearer INSERT_MANAGER_TOKEN_HERE
+
+{
+  "userId": 1
+}
+
+###
+### 8. LOGIN AFTER ADMIN COMPLETION - Should succeed
+POST {{apiUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{testEmail}}",
+  "password": "{{testPassword}}"
+}
+
+###
+### 8a. VERIFY EMAIL CODE (manual step)
+### Use this if you want to test manual verification instead of admin force
+# POST {{apiUrl}}/auth/verify-registration-email
+# Content-Type: application/json
+# 
+# {
+#   "sessionId": "SESSION_ID_FROM_STEP_2",
+#   "emailCode": "EMAIL_CODE_FROM_EMAIL"
+# }
+
+###
+### 8b. VERIFY PHONE CODE (manual step)
+### Use this if you want to test manual verification instead of admin force
+# POST {{apiUrl}}/auth/verify-registration-phone
+# Content-Type: application/json
+# 
+# {
+#   "sessionId": "SESSION_ID_FROM_STEP_2",
+#   "phoneCode": "PHONE_CODE_FROM_SMS"
+# }
+
+###
+### 8c. COMPLETE REGISTRATION (manual step)
+### Use this after both email and phone are verified manually
+# POST {{apiUrl}}/auth/complete-registration
+# Content-Type: application/json
+# 
+# {
+#   "sessionId": "SESSION_ID_FROM_STEP_2"
+# }
+
+###
+### 9. ACCESS PROTECTED ENDPOINT - Should work with valid token
+GET {{apiUrl}}/profile
+Authorization: Bearer INSERT_ACCESS_TOKEN_HERE
+
+###
+### 10. ACCESS FULL-VERIFICATION ENDPOINT - Should work
+GET {{apiUrl}}/pets
+Authorization: Bearer INSERT_ACCESS_TOKEN_HERE
+
+###
+### 11. LOGOUT - Should invalidate token
+POST {{apiUrl}}/auth/logout
+Authorization: Bearer INSERT_ACCESS_TOKEN_HERE
+
+###
+### 12. ACCESS AFTER LOGOUT - Should fail
+GET {{apiUrl}}/profile
+Authorization: Bearer INSERT_ACCESS_TOKEN_HERE
+
+### 
+### NOTES:
+### - Replace INSERT_MANAGER_TOKEN_HERE with actual manager JWT token
+### - Replace INSERT_ACCESS_TOKEN_HERE with JWT token from successful login
+### - Server must be running on https://localhost:8443
+### - Accept browser certificate warnings for self-signed SSL
+### 
+### EXPECTED FLOW:
+### 1. Health check succeeds
+### 2. Registration creates pending verification session
+### 3. Verification status shows incomplete
+### 4. Login fails before verification
+### 5. Restart verification works
+### 6. Admin can view and complete verification
+### 7. Login succeeds after admin completion
+### 8. Protected endpoints work with valid token
+### 9. Logout invalidates token
+### 10. Access fails after logout

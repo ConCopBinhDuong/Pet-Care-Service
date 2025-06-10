@@ -7,8 +7,8 @@ const router = express.Router();
 // Get all pets for the authenticated pet owner
 router.get('/', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
 
         // Only pet owners can access this endpoint
         if (userRole !== 'Pet owner') {
@@ -40,8 +40,8 @@ router.get('/', (req, res) => {
 // Add a new pet for the authenticated pet owner
 router.post('/', validatePetCreation, (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const { name, breed, description, age, dob, picture } = req.body;
 
         // Only pet owners can add pets
@@ -111,8 +111,8 @@ router.post('/', validatePetCreation, (req, res) => {
 // Get a specific pet by ID
 router.get('/:petId', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const petId = parseInt(req.params.petId);
 
         // Only pet owners can access this endpoint
@@ -163,8 +163,8 @@ router.get('/:petId', (req, res) => {
 // Update a specific pet
 router.put('/:petId', validatePetUpdate, (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const petId = parseInt(req.params.petId);
         const updates = req.body;
 
@@ -243,8 +243,8 @@ router.put('/:petId', validatePetUpdate, (req, res) => {
 // Delete a specific pet
 router.delete('/:petId', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const petId = parseInt(req.params.petId);
 
         // Only pet owners can delete pets

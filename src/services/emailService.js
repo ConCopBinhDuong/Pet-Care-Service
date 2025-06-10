@@ -37,11 +37,6 @@ class EmailService {
         return Math.floor(100000 + Math.random() * 900000).toString();
     }
 
-    generatePhoneVerificationCode() {
-        // Generate a 6-digit verification code (same as email for consistency)
-        return Math.floor(100000 + Math.random() * 900000).toString();
-    }
-
     async sendEmailVerification(email, code, userName) {
         const mailOptions = {
             from: process.env.EMAIL_FROM || 'noreply@petcare.com',
@@ -67,36 +62,6 @@ class EmailService {
             }
         } catch (error) {
             console.error('Email sending failed:', error);
-            return { success: false, error: error.message };
-        }
-    }
-
-    async sendPhoneVerification(phone, code) {
-        // In a real application, integrate with SMS service like Twilio, AWS SNS, etc.
-        // For development, we'll log to console
-        try {
-            if (process.env.NODE_ENV === 'production') {
-                // TODO: Integrate with SMS service
-                // Example with Twilio:
-                // const twilioClient = require('twilio')(accountSid, authToken);
-                // await twilioClient.messages.create({
-                //     body: `Your Pet Care verification code is: ${code}`,
-                //     from: process.env.TWILIO_PHONE_NUMBER,
-                //     to: phone
-                // });
-                console.log(`SMS would be sent to ${phone} with code: ${code}`);
-                return { success: true, messageId: 'sms-sent' };
-            } else {
-                // Development mode - log to console
-                console.log('\n📱 SMS Verification Code (Development Mode)');
-                console.log('============================================');
-                console.log(`To: ${phone}`);
-                console.log(`Message: Your Pet Care verification code is: ${code}`);
-                console.log('============================================\n');
-                return { success: true, messageId: 'dev-mode-sms' };
-            }
-        } catch (error) {
-            console.error('SMS sending failed:', error);
             return { success: false, error: error.message };
         }
     }

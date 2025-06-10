@@ -1,0 +1,26 @@
+import express from 'express';
+import scheduleDashboard from './src/routes/scheduleDashboard.js';
+
+console.log('✅ Schedule Dashboard Routes Loaded Successfully');
+console.log('📋 Available endpoints:');
+console.log('');
+console.log('PET OWNER ENDPOINTS:');
+console.log('  GET /api/schedule/dashboard - Pet owner appointment dashboard');
+console.log('  GET /api/schedule/weekly - Pet owner weekly schedule');
+console.log('  GET /api/schedule/today - Pet owner today\'s appointments');
+console.log('');
+console.log('SERVICE PROVIDER ENDPOINTS:');
+console.log('  GET /api/schedule/provider-dashboard - Service provider work dashboard');
+console.log('  GET /api/schedule/monthly - Service provider monthly schedule');
+console.log('  GET /api/schedule/provider-today - Service provider today\'s work');
+console.log('');
+console.log('GENERAL SCHEDULE ENDPOINTS:');
+console.log('  POST /api/schedule/create - Create schedule entry');
+console.log('  GET /api/schedule/entries - Get schedule entries');
+console.log('');
+console.log('🔄 File rename completed: schedule.js → petSchedule.js');
+console.log('📁 New file: scheduleDashboard.js created with comprehensive endpoints');
+console.log('🔧 Server.js updated with new route configurations');
+console.log('🧪 Test file created: test_schedule_dashboard_endpoints.rest');
+console.log('');
+console.log('✨ Schedule Dashboard Implementation Complete!');
