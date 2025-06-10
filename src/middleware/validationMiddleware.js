@@ -823,3 +823,28 @@ export const validateScheduleUpdate = (req, res, next) => {
 
     next();
 };
+
+
+
+/**
+ * Validate ticket reply data
+ */
+export const validateTicketReply = (req, res, next) => {
+    const { response } = req.body;
+    const errors = [];
+
+    // Validate that the response is provided and is a non-empty string
+    if (!response || typeof response !== 'string' || response.trim().length === 0) {
+        errors.push('Response is required and must be a non-empty string');
+    }
+
+    if (errors.length > 0) {
+        return res.status(400).json({
+            success: false,
+            error: 'Validation failed',
+            details: errors
+        });
+    }
+
+    next();
+};
