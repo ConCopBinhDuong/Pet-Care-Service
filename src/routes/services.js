@@ -313,4 +313,64 @@ router.get('/:serviceid', (req, res) => {
     }
 });
 
+// Manager reviews a service
+router.post('/:serviceId/review', (req, res) => {
+    try {
+        const managerId = req.userId; // Assuming manager's ID is set in req.userId
+        const userRole = req.userRole;
+        const serviceId = parseInt(req.params.serviceId);
+        const { action, comments } = req.body; // `action` should be 'approve' or 'reject'
+
+        // Only managers can review services
+        if (userRole !== 'Manager') {
+            return res.status(403).json({
+                message: 'Access denied. Only managers can review services.'
+            });
+        }
+
+        if (isNaN(serviceId)) {
+            return res.status(400).json({ message: 'Invalid service ID' });
+        }
+
+        if (!['approve', 'reject'].includes(action)) {
+            return res.status(400).json({ message: 'Invalid action. Use "approve" or "reject".' });
+        }
+
+        // Check if the service exists
+        const getServiceStmt = db.prepare(`
+            SELECT serviceid, status 
+            FROM service 
+            WHERE serviceid = ?
+        `);
+        const service = getServiceStmt.get(serviceId);
+
+        if (!service) {
+            return res.status(404).json({ message: 'Service not found' });
+        }
+
+        if (service.status !== 'pending') {
+            return res.status(400).json({ message: 'Only services in "pending" status can be reviewed.' });
+        }
+
+        // Update the service status based on the action
+        const newStatus = action === 'approve' ? 'approved' : 'rejected';
+        const updateServiceStmt = db.prepare(`
+            UPDATE service 
+            SET status = ?, managerid = ?, review_comments = ? 
+            WHERE serviceid = ?
+        `);
+        updateServiceStmt.run(newStatus, managerId, comments || null, serviceId);
+
+        res.status(200).json({
+            message: `Service ${action}d successfully`,
+            serviceId: serviceId,
+            status: newStatus
+        });
+    } catch (err) {
+        console.error('Review service error:', err.message);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
+
 export default router;
