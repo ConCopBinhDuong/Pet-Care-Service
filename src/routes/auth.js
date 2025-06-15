@@ -27,12 +27,23 @@ router.post('/register', validateRegistration, async (req, res) => {
                 error: 'Email already registered'
             });
         }
-        const phoneExists = db.prepare('SELECT userid FROM users WHERE phone = ?').get(email);
-        if (emailExists) {
-            return res.status(400).json({
-                success: false,
-                error: 'Phone number already registered'
-            });
+        if (phone) {
+            let phoneExists = false;
+            
+            if (role === 'Pet owner') {
+                const petOwnerPhone = db.prepare('SELECT id FROM petowner WHERE phone = ?').get(phone);
+                phoneExists = petOwnerPhone !== undefined;
+            } else if (role === 'Service provider') {
+                const providerPhone = db.prepare('SELECT id FROM serviceprovider WHERE phone = ?').get(phone);
+                phoneExists = providerPhone !== undefined;
+            }
+
+            if (phoneExists) {
+                return res.status(400).json({
+                    success: false,
+                    error: `Phone number already registered for another ${role.toLowerCase()}`
+                });
+            }
         }
 
         // Check phone validation for Vietnamese numbers (if phone provided)
