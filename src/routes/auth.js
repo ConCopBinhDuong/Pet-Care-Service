@@ -27,6 +27,13 @@ router.post('/register', validateRegistration, async (req, res) => {
                 error: 'Email already registered'
             });
         }
+        const phoneExists = db.prepare('SELECT userid FROM users WHERE phone = ?').get(email);
+        if (emailExists) {
+            return res.status(400).json({
+                success: false,
+                error: 'Phone number already registered'
+            });
+        }
 
         // Check phone validation for Vietnamese numbers (if phone provided)
         if (phone && !validateVietnamesePhone(phone)) {
