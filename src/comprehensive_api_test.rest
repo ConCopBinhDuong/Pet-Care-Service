@@ -15,14 +15,14 @@
 @dietId = 
 @activityId = 
 @scheduleId = 
-@sessionId = 
+@sessionId = a6cb8875-6521-428b-a2fa-7eadd00025a3
 
 # ===================================================================
 # AUTHENTICATION ENDPOINTS
 # ===================================================================
 
 ### 1. Health Check
-GET {{baseUrl}}/../health
+GET https://localhost:8443/health
 
 ### 2. Start Registration - Pet Owner
 POST {{baseUrl}}/auth/start-verification
@@ -30,7 +30,7 @@ Content-Type: application/json
 
 {
     "username": "John Doe",
-    "email": "john.petowner@example.com",
+    "email": "thanhnhan1662004@gmail.com",
     "password": "SecurePass123!",
     "gender": "Male",
     "role": "Pet owner",
@@ -57,12 +57,12 @@ Content-Type: application/json
 }
 
 ### 4. Email Verification Step
-POST {{baseUrl}}/auth/verify-email
+POST {{baseUrl}}/auth/verify-registration-email
 Content-Type: application/json
 
 {
-    "sessionId": "{{sessionId}}",
-    "emailCode": "123456"
+    "sessionId": "0b0f5990-9665-46a6-87b9-1f1daf01f7d1",
+    "emailCode": "997360"
 }
 
 ### 5. Complete Registration
@@ -70,7 +70,7 @@ POST {{baseUrl}}/auth/complete-registration
 Content-Type: application/json
 
 {
-    "sessionId": "{{sessionId}}"
+    "sessionId": "0b0f5990-9665-46a6-87b9-1f1daf01f7d1"
 }
 
 ### 6. Login - Pet Owner
@@ -143,7 +143,7 @@ Content-Type: application/json
 }
 
 ### 15. Check Verification Status
-POST {{baseUrl}}/auth/check-verification-status
+POST {{baseUrl}}/auth/verification-status
 Content-Type: application/json
 
 {
@@ -797,6 +797,55 @@ GET {{baseUrl}}/services?types=1,2,3&minPrice=50&maxPrice=300&search=grooming&lo
 
 ### 106. Advanced Booking Search (Pet Owner)
 GET {{baseUrl}}/bookings?status=confirmed&startDate=2024-01-01&endDate=2024-12-31&serviceType=1&sortBy=date&sortOrder=desc
+Authorization: Bearer {{petOwnerToken}}
+
+# ===================================================================
+# NOTIFICATION ENDPOINTS
+# ===================================================================
+
+### 107. Get All Notifications
+GET {{baseUrl}}/notifications
+Authorization: Bearer {{petOwnerToken}}
+
+### 108. Get Notifications with Pagination
+GET {{baseUrl}}/notifications?page=1&limit=10
+Authorization: Bearer {{petOwnerToken}}
+
+### 109. Get Unread Notifications Only
+GET {{baseUrl}}/notifications?unreadOnly=true
+Authorization: Bearer {{petOwnerToken}}
+
+### 110. Get Notifications by Type
+GET {{baseUrl}}/notifications?type=booking_accepted
+Authorization: Bearer {{petOwnerToken}}
+
+### 111. Get Notification Statistics
+GET {{baseUrl}}/notifications/stats
+Authorization: Bearer {{petOwnerToken}}
+
+### 112. Mark Notification as Read
+PUT {{baseUrl}}/notifications/1/read
+Authorization: Bearer {{petOwnerToken}}
+
+### 113. Mark All Notifications as Read
+PUT {{baseUrl}}/notifications/read-all
+Authorization: Bearer {{petOwnerToken}}
+
+### 114. Delete Notification
+DELETE {{baseUrl}}/notifications/1
+Authorization: Bearer {{petOwnerToken}}
+
+### 115. Manual Schedule Check (Manager)
+POST {{baseUrl}}/notifications/check-schedules
+Authorization: Bearer {{managerToken}}
+
+### 116. Get System Notification Stats (Admin)
+GET {{baseUrl}}/notifications/admin/stats
+Authorization: Bearer {{managerToken}}
+
+### 117. Cleanup Old Notifications (Admin)
+POST {{baseUrl}}/notifications/admin/cleanup
+Authorization: Bearer {{managerToken}}
 
 ### 107. Advanced Report Search (Manager)
 GET {{baseUrl}}/reports/admin/summary?startDate=2024-01-01&endDate=2024-12-31&providerId=1&serviceType=1

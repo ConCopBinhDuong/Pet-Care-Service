@@ -25,6 +25,11 @@ import servicesRoutes from './routes/services.js'
 import bookingsRoutes from './routes/bookings.js'
 import reviewsRoutes from './routes/reviews.js'
 import reportsRoutes from './routes/reports.js'
+import notificationsRoutes from './routes/notifications.js'
+import chatRoutes from './routes/chat.js'
+
+// Service imports
+import notificationScheduler from './services/notificationScheduler.js'
 
 const app = express() ; 
 const HTTP_PORT = process.env.PORT || 8383 ;
@@ -95,16 +100,18 @@ if (NODE_ENV === 'production' && httpsOptions) {
 
 // API Routes with specific rate limiting for auth routes
 app.use('/api/auth', authLimiter, authRoutes);
-app.use('/api/profile', authMiddleware, requireEmailVerification, profileRoutes);
-app.use('/api/pets', authMiddleware, requireFullVerification, petsRoutes);
-app.use('/api/diet', authMiddleware, requireFullVerification, dietRoutes);
-app.use('/api/activity', authMiddleware, requireFullVerification, activityRoutes);
-app.use('/api/pet-schedule', authMiddleware, requireFullVerification, petScheduleRoutes);
+app.use('/api/profile', authMiddleware,  profileRoutes);
+app.use('/api/pets', authMiddleware,  petsRoutes);
+app.use('/api/diet', authMiddleware,  dietRoutes);
+app.use('/api/activity', authMiddleware,  activityRoutes);
+app.use('/api/pet-schedule', authMiddleware,  petScheduleRoutes);
 app.use('/api/schedule', scheduleDashboardRoutes);  // Schedule dashboard with embedded auth
 app.use('/api/services', servicesRoutes);  // Public access for browsing services
-app.use('/api/bookings', authMiddleware, requireFullVerification, bookingsRoutes);  // Requires full verification
-app.use('/api/reviews', authMiddleware, requireFullVerification, reviewsRoutes);  // Requires full verification
-app.use('/api/reports', authMiddleware, requireFullVerification, reportsRoutes);  // Requires full verification
+app.use('/api/bookings', authMiddleware,  bookingsRoutes);  // Requires full verification
+app.use('/api/reviews', authMiddleware,  reviewsRoutes);  // Requires full verification
+app.use('/api/reports', authMiddleware, reportsRoutes);  // Requires full verification
+app.use('/api/notifications', notificationsRoutes);  // Notification management
+app.use('/api/chat', authMiddleware, chatRoutes);  // Chat between pet owners and service providers
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -135,6 +142,10 @@ https.createServer(httpsOptions, app).listen(HTTPS_PORT, async () => {
     console.log(`Browser warning expected with self-signed certificates`);
     console.log(`Access via: https://localhost:${HTTPS_PORT}`);
     console.log(`HTTPS-only mode: No HTTP server running`);
+    
+    // Start notification scheduler
+    console.log('🔔 Starting notification scheduler...');
+    notificationScheduler.start();
     
     if (NODE_ENV === 'development') {
         console.log('\n💡 Development Tips:');

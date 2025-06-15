@@ -1,0 +1,64 @@
+### Gmail Integration API Tests
+### Test real email sending through the Pet Care Service API
+
+@baseUrl = https://localhost:8443/api
+@testEmail = your.real.email@gmail.com
+@testPassword = TestPass123
+
+### 1. Test Email Verification (Registration Flow)
+# This will send a real verification email if Gmail is configured
+POST {{baseUrl}}/auth/start-verification
+Content-Type: application/json
+
+{
+    "username": "Gmail Test User",
+    "email": "{{testEmail}}",
+    "password": "{{testPassword}}",
+    "gender": "Male",
+    "role": "Pet owner",
+    "city": "Test City",
+    "address": "123 Test Street"
+}
+
+### 2. Test Password Reset Email
+# This will send a real password reset email if Gmail is configured
+POST {{baseUrl}}/auth/forgot-password
+Content-Type: application/json
+
+{
+    "email": "{{testEmail}}"
+}
+
+### 3. Test Email Verification for Existing User
+# First, you need to login to get a token from a previous registration
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "email": "{{testEmail}}",
+    "password": "{{testPassword}}"
+}
+
+### 4. Resend Email Verification (requires auth token from login)
+POST {{baseUrl}}/auth/resend-email-verification
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+Content-Type: application/json
+
+### Expected Results with Gmail Configured:
+# ✅ Real emails sent to your Gmail inbox
+# ✅ Console logs show "Gmail SMTP connection verified"  
+# ✅ Console logs show "Email verification sent: [MESSAGE_ID]"
+# ✅ You'll receive actual emails with verification codes
+
+### Expected Results without Gmail (Development Mode):
+# 📝 Emails logged to console only
+# 📝 Console shows "Using development mode - emails will be logged to console"
+# 📝 No real emails sent, but codes displayed in server logs
+
+### To Enable Gmail:
+# 1. Uncomment these lines in .env:
+#    GMAIL_EMAIL=your.email@gmail.com
+#    GMAIL_APP_PASSWORD=your_16_digit_app_password
+# 2. Replace with your actual Gmail credentials
+# 3. Restart the server
+# 4. Run these tests again

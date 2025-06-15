@@ -244,7 +244,14 @@ db.exec(`
     notiid INTEGER PRIMARY KEY AUTOINCREMENT,
     text TEXT,
     userid INTEGER,
-    FOREIGN KEY(userid) REFERENCES users(userid) ON UPDATE CASCADE ON DELETE CASCADE
+    type TEXT DEFAULT 'general' CHECK(type IN ('general', 'diet', 'activity', 'service_approved', 'service_rejected', 'booking_accepted', 'booking_rejected', 'booking_expired', 'booking_request', 'booking_reminder')),
+    schedule_id INTEGER,
+    related_id INTEGER,
+    scheduled_time DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    read_status INTEGER DEFAULT 0 CHECK(read_status IN (0, 1)),
+    FOREIGN KEY(userid) REFERENCES users(userid) ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY(schedule_id) REFERENCES petschedule(petscheduleid) ON UPDATE CASCADE ON DELETE CASCADE
   );
 `);
 
@@ -278,6 +285,27 @@ db.exec(`
 db.exec(`
   CREATE INDEX idx_token_blacklist_user_id 
   ON token_blacklist(user_id);
+`);
+
+// Notification table indexes for performance
+db.exec(`
+  CREATE INDEX idx_notification_userid_created 
+  ON notification(userid, created_at DESC);
+`);
+
+db.exec(`
+  CREATE INDEX idx_notification_type 
+  ON notification(type);
+`);
+
+db.exec(`
+  CREATE INDEX idx_notification_read_status 
+  ON notification(read_status);
+`);
+
+db.exec(`
+  CREATE INDEX idx_notification_schedule_id 
+  ON notification(schedule_id);
 `);
 
 export default db;

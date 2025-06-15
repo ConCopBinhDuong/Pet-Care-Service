@@ -1347,3 +1347,52 @@ export const validateTimeslotConflicts = (req, res, next) => {
         });
     }
 };
+
+/**
+ * Chat message validation middleware
+ */
+export const validateChatMessage = (req, res, next) => {
+    const { text, image } = req.body;
+    const errors = [];
+
+    // At least one of text or image must be provided
+    if (!text && !image) {
+        errors.push('At least text or image must be provided');
+    }
+
+    // Text validation (if provided)
+    if (text) {
+        if (typeof text !== 'string') {
+            errors.push('Text must be a string');
+        } else if (text.trim().length === 0) {
+            errors.push('Text cannot be empty');
+        } else if (text.length > 2000) {
+            errors.push('Text cannot exceed 2000 characters');
+        }
+    }
+
+    // Image validation (if provided)
+    if (image) {
+        if (typeof image !== 'string') {
+            errors.push('Image must be provided as base64 string');
+        } else {
+            // Basic base64 validation
+            const base64Pattern = /^[A-Za-z0-9+\/]*={0,2}$/;
+            if (!base64Pattern.test(image)) {
+                errors.push('Invalid base64 image format');
+            } else if (image.length > 5000000) { // ~3.7MB limit for base64
+                errors.push('Image size too large (max ~3.7MB)');
+            }
+        }
+    }
+
+    if (errors.length > 0) {
+        return res.status(400).json({
+            success: false,
+            error: 'Validation failed',
+            details: errors
+        });
+    }
+
+    next();
+};

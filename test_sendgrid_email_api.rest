@@ -1,0 +1,228 @@
+### SendGrid Email Service API Tests
+### Test the SendGrid email integration for verification codes and emails
+### Make sure to configure SENDGRID_API_KEY and SENDGRID_FROM_EMAIL in .env file
+
+@baseUrl = https://localhost:8443/api
+@testEmail = your.email@example.com
+@testPassword = SecurePass123!
+@testUsername = sendgrid_test_user
+
+### Prerequisites:
+### 1. Configure SendGrid API key in .env file
+### 2. Set verified sender email in .env file
+### 3. Server must be running with HTTPS
+
+# ===================================================================
+# EMAIL VERIFICATION FLOW TESTS
+# ===================================================================
+
+### 1. Health Check
+GET https://localhost:8443/health
+
+### 2. Start Verification Process - Email Verification Code Will Be Sent
+POST {{baseUrl}}/auth/start-verification
+Content-Type: application/json
+
+{
+    "username": "{{testUsername}}",
+    "email": "{{testEmail}}",
+    "password": "{{testPassword}}",
+    "gender": "Male",
+    "role": "Pet owner",
+    "phone": "+84901234567",
+    "city": "Ho Chi Minh City",
+    "address": "123 Test Street, District 1"
+}
+
+### 3. Verify Email with Code (Use code from email received)
+### Replace EMAIL_CODE_FROM_EMAIL with actual code from your email
+POST {{baseUrl}}/auth/verify-registration-email
+Content-Type: application/json
+
+{
+    "sessionId": "SESSION_ID_FROM_STEP_2",
+    "emailCode": "EMAIL_CODE_FROM_EMAIL"
+}
+
+### 4. Complete Registration
+POST {{baseUrl}}/auth/complete-registration
+Content-Type: application/json
+
+{
+    "sessionId": "SESSION_ID_FROM_STEP_2"
+}
+
+### 5. Login to Get JWT Token
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "email": "{{testEmail}}",
+    "password": "{{testPassword}}"
+}
+
+# ===================================================================
+# FORGOT PASSWORD EMAIL TESTS
+# ===================================================================
+
+### 6. Request Password Reset - Password Reset Email Will Be Sent
+POST {{baseUrl}}/auth/forgot-password
+Content-Type: application/json
+
+{
+    "email": "{{testEmail}}"
+}
+
+### 7. Reset Password with Code (Use code from email received)
+### Replace PASSWORD_RESET_CODE with actual code from your email
+POST {{baseUrl}}/auth/reset-password
+Content-Type: application/json
+
+{
+    "email": "{{testEmail}}",
+    "code": "PASSWORD_RESET_CODE",
+    "newPassword": "NewSecurePass123!"
+}
+
+# ===================================================================
+# RESEND EMAIL TESTS
+# ===================================================================
+
+### 8. Resend Password Reset Email
+POST {{baseUrl}}/auth/resend-password-reset
+Content-Type: application/json
+
+{
+    "email": "{{testEmail}}"
+}
+
+### 9. Resend Email Verification (for new users)
+### First, create a new user account via legacy registration
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+    "username": "legacy_user_test",
+    "email": "another.email@example.com",
+    "password": "{{testPassword}}",
+    "gender": "Female",
+    "role": "Pet owner",
+    "city": "Hanoi",
+    "address": "456 Another Street"
+}
+
+### 10. Login to get token for resend email verification
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "email": "another.email@example.com",
+    "password": "{{testPassword}}"
+}
+
+### 11. Resend Email Verification Code
+POST {{baseUrl}}/auth/resend-email-verification
+Authorization: Bearer YOUR_JWT_TOKEN_HERE
+Content-Type: application/json
+
+# ===================================================================
+# SERVICE PROVIDER EMAIL TESTS
+# ===================================================================
+
+### 12. Test Service Provider Registration - Email with Business Info
+POST {{baseUrl}}/auth/start-verification
+Content-Type: application/json
+
+{
+    "username": "Premium Pet Care Service",
+    "email": "provider.test@example.com",
+    "password": "{{testPassword}}",
+    "gender": "Other",
+    "role": "Service provider",
+    "phone": "+84907654321",
+    "bussiness_name": "Premium Pet Care & Grooming",
+    "description": "Professional pet grooming, boarding, and veterinary services",
+    "address": "789 Business District, Ho Chi Minh City",
+    "website": "https://premiumpetcare.com"
+}
+
+### 13. Verify Service Provider Email
+POST {{baseUrl}}/auth/verify-registration-email
+Content-Type: application/json
+
+{
+    "sessionId": "SERVICE_PROVIDER_SESSION_ID",
+    "emailCode": "SERVICE_PROVIDER_EMAIL_CODE"
+}
+
+# ===================================================================
+# EMAIL SERVICE DIRECT TESTS (ADMIN/DEBUG)
+# ===================================================================
+
+### 14. Test Multiple Email Types by Creating Different Users
+### This will test all email templates: verification, welcome, password reset
+
+### Create Pet Owner
+POST {{baseUrl}}/auth/start-verification
+Content-Type: application/json
+
+{
+    "username": "Pet Owner Email Test",
+    "email": "petowner.emailtest@example.com",
+    "password": "{{testPassword}}",
+    "gender": "Female",
+    "role": "Pet owner",
+    "city": "Da Nang",
+    "address": "321 Pet Street"
+}
+
+### Create Manager
+POST {{baseUrl}}/auth/start-verification
+Content-Type: application/json
+
+{
+    "username": "Manager Email Test",
+    "email": "manager.emailtest@example.com",
+    "password": "{{testPassword}}",
+    "gender": "Male",
+    "role": "Manager"
+}
+
+# ===================================================================
+# EXPECTED RESULTS
+# ===================================================================
+
+### Expected Email Types to Receive:
+### 1. Email Verification Code - 6-digit code with professional template
+### 2. Welcome Email - Sent after successful registration completion
+### 3. Password Reset Code - 6-digit code for password reset
+### 4. Password Reset Success - Confirmation after password change
+
+### Email Features to Verify:
+### ✅ Professional HTML templates with Pet Care Service branding
+### ✅ Clear verification codes (6-digit numbers)
+### ✅ Security warnings about code expiration (1 minute)
+### ✅ Sender email matches SENDGRID_FROM_EMAIL
+### ✅ Subject lines are appropriate
+### ✅ No HTML rendering issues
+### ✅ SendGrid delivery tracking
+
+### Troubleshooting:
+### 1. Check spam/junk folders if emails don't arrive
+### 2. Verify SendGrid API key is valid and has send permissions
+### 3. Ensure sender email is verified in SendGrid dashboard
+### 4. Check server logs for SendGrid API responses
+### 5. Verify .env configuration is loaded correctly
+
+### SendGrid Configuration Check:
+### 1. SENDGRID_API_KEY should start with "SG."
+### 2. SENDGRID_FROM_EMAIL should be verified in SendGrid
+### 3. Remove comments (#) from environment variables
+### 4. Restart server after .env changes
+
+### To Enable SendGrid:
+### 1. Uncomment SENDGRID_API_KEY in .env
+### 2. Uncomment SENDGRID_FROM_EMAIL in .env
+### 3. Add your actual SendGrid API key
+### 4. Add your verified sender email
+### 5. Restart the server

@@ -1,0 +1,373 @@
+### NOTIFICATION SYSTEM API TESTS
+### Pet Care Service Backend - Comprehensive Notification Testing
+
+@baseUrl = https://localhost:8443/api
+@petOwnerToken = 
+@serviceProviderToken = 
+@managerToken = 
+
+# ===================================================================
+# SETUP - LOGIN TO GET TOKENS (Run these first)
+# ===================================================================
+
+### 1. Login as Pet Owner
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "username": "petowner@example.com",
+    "password": "password123"
+}
+
+### 2. Login as Service Provider
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "username": "provider@example.com",
+    "password": "password123"
+}
+
+### 3. Login as Manager
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "username": "manager@example.com",
+    "password": "password123"
+}
+
+# ===================================================================
+# NOTIFICATION RETRIEVAL ENDPOINTS
+# ===================================================================
+
+### 4. Get All Notifications (Pet Owner)
+GET {{baseUrl}}/notifications
+Authorization: Bearer {{petOwnerToken}}
+
+### 5. Get Notifications with Pagination
+GET {{baseUrl}}/notifications?page=1&limit=10
+Authorization: Bearer {{petOwnerToken}}
+
+### 6. Get Unread Notifications Only
+GET {{baseUrl}}/notifications?unreadOnly=true
+Authorization: Bearer {{petOwnerToken}}
+
+### 7. Get Notifications by Type - Diet
+GET {{baseUrl}}/notifications?type=diet
+Authorization: Bearer {{petOwnerToken}}
+
+### 8. Get Notifications by Type - Service Approved
+GET {{baseUrl}}/notifications?type=service_approved
+Authorization: Bearer {{serviceProviderToken}}
+
+### 9. Get Notifications by Type - Booking Request
+GET {{baseUrl}}/notifications?type=booking_request
+Authorization: Bearer {{serviceProviderToken}}
+
+### 10. Get Notification Statistics (Pet Owner)
+GET {{baseUrl}}/notifications/stats
+Authorization: Bearer {{petOwnerToken}}
+
+### 11. Get Notification Statistics (Service Provider)
+GET {{baseUrl}}/notifications/stats
+Authorization: Bearer {{serviceProviderToken}}
+
+# ===================================================================
+# NOTIFICATION MANAGEMENT ENDPOINTS
+# ===================================================================
+
+### 12. Mark Notification as Read (use notification ID from previous calls)
+PUT {{baseUrl}}/notifications/1/read
+Authorization: Bearer {{petOwnerToken}}
+
+### 13. Mark All Notifications as Read
+PUT {{baseUrl}}/notifications/read-all
+Authorization: Bearer {{petOwnerToken}}
+
+### 14. Delete a Notification (use notification ID from previous calls)
+DELETE {{baseUrl}}/notifications/1
+Authorization: Bearer {{petOwnerToken}}
+
+# ===================================================================
+# MANUAL NOTIFICATION TRIGGERS (Testing)
+# ===================================================================
+
+### 15. Manually Trigger Schedule Checks (Manager)
+POST {{baseUrl}}/notifications/check-schedules
+Authorization: Bearer {{managerToken}}
+
+### 16. Manually Trigger Schedule Checks (Service Provider)
+POST {{baseUrl}}/notifications/check-schedules
+Authorization: Bearer {{serviceProviderToken}}
+
+### 17. Try Manual Schedule Check as Pet Owner (Should Fail)
+POST {{baseUrl}}/notifications/check-schedules
+Authorization: Bearer {{petOwnerToken}}
+
+# ===================================================================
+# ADMIN NOTIFICATION ENDPOINTS (Manager Only)
+# ===================================================================
+
+### 18. Get System Notification Statistics (Admin)
+GET {{baseUrl}}/notifications/admin/stats
+Authorization: Bearer {{managerToken}}
+
+### 19. Cleanup Old Notifications (Admin)
+POST {{baseUrl}}/notifications/admin/cleanup
+Authorization: Bearer {{managerToken}}
+
+### 20. Try Admin Stats as Pet Owner (Should Fail)
+GET {{baseUrl}}/notifications/admin/stats
+Authorization: Bearer {{petOwnerToken}}
+
+### 21. Try Admin Cleanup as Service Provider (Should Fail)
+POST {{baseUrl}}/notifications/admin/cleanup
+Authorization: Bearer {{serviceProviderToken}}
+
+# ===================================================================
+# INTEGRATION TESTS - CREATE SCENARIOS TO TRIGGER NOTIFICATIONS
+# ===================================================================
+
+### 22. Submit a Service (Service Provider) - Should NOT trigger notification yet
+POST {{baseUrl}}/services/submit
+Authorization: Bearer {{serviceProviderToken}}
+Content-Type: application/json
+
+{
+    "name": "Test Pet Grooming Service",
+    "price": 50,
+    "description": "Professional pet grooming service",
+    "duration": "2 hours",
+    "typeid": 1,
+    "timeSlots": ["09:00", "11:00", "14:00", "16:00"]
+}
+
+### 23. Approve the Service (Manager) - Should trigger service_approved notification
+POST {{baseUrl}}/services/1/review
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+
+{
+    "action": "approve"
+}
+
+### 24. Check Service Provider Notifications (Should see approval notification)
+GET {{baseUrl}}/notifications?type=service_approved
+Authorization: Bearer {{serviceProviderToken}}
+
+### 25. Submit Another Service to Reject
+POST {{baseUrl}}/services/submit
+Authorization: Bearer {{serviceProviderToken}}
+Content-Type: application/json
+
+{
+    "name": "Test Pet Training Service",
+    "price": 75,
+    "description": "Basic pet training",
+    "duration": "1 hour",
+    "typeid": 2,
+    "timeSlots": ["10:00", "15:00"]
+}
+
+### 26. Reject the Service (Manager) - Should trigger service_rejected notification
+POST {{baseUrl}}/services/2/review
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+
+{
+    "action": "reject",
+    "rejectionReason": "Service description needs more detail about training methods"
+}
+
+### 27. Check Service Provider Notifications (Should see rejection notification)
+GET {{baseUrl}}/notifications?type=service_rejected
+Authorization: Bearer {{serviceProviderToken}}
+
+### 28. Create a Booking (Pet Owner) - Should trigger booking_request notification
+POST {{baseUrl}}/bookings
+Authorization: Bearer {{petOwnerToken}}
+Content-Type: application/json
+
+{
+    "serviceid": 1,
+    "slot": "09:00",
+    "servedate": "2025-06-15",
+    "payment_method": "cash",
+    "petIds": [1]
+}
+
+### 29. Check Service Provider Notifications (Should see booking request notification)
+GET {{baseUrl}}/notifications?type=booking_request
+Authorization: Bearer {{serviceProviderToken}}
+
+### 30. Accept the Booking (Service Provider) - Should trigger booking_accepted notification
+POST {{baseUrl}}/bookings/provider/requests/1/accept
+Authorization: Bearer {{serviceProviderToken}}
+
+### 31. Check Pet Owner Notifications (Should see booking accepted notification)
+GET {{baseUrl}}/notifications?type=booking_accepted
+Authorization: Bearer {{petOwnerToken}}
+
+### 32. Create Another Booking to Reject
+POST {{baseUrl}}/bookings
+Authorization: Bearer {{petOwnerToken}}
+Content-Type: application/json
+
+{
+    "serviceid": 1,
+    "slot": "11:00",
+    "servedate": "2025-06-16",
+    "payment_method": "cash",
+    "petIds": [1]
+}
+
+### 33. Reject the Booking (Service Provider) - Should trigger booking_rejected notification
+POST {{baseUrl}}/bookings/provider/requests/2/reject
+Authorization: Bearer {{serviceProviderToken}}
+Content-Type: application/json
+
+{
+    "reason": "Schedule conflict with another appointment"
+}
+
+### 34. Check Pet Owner Notifications (Should see booking rejected notification)
+GET {{baseUrl}}/notifications?type=booking_rejected
+Authorization: Bearer {{petOwnerToken}}
+
+# ===================================================================
+# PET SCHEDULE NOTIFICATIONS TEST
+# ===================================================================
+
+### 35. Create a Pet Diet Schedule (Pet Owner)
+POST {{baseUrl}}/pet-schedule
+Authorization: Bearer {{petOwnerToken}}
+Content-Type: application/json
+
+{
+    "dietid": 1,
+    "startdate": "2025-06-12",
+    "repeat_option": "daily",
+    "hour": 8,
+    "minute": 0
+}
+
+### 36. Create a Pet Activity Schedule (Pet Owner)
+POST {{baseUrl}}/pet-schedule
+Authorization: Bearer {{petOwnerToken}}
+Content-Type: application/json
+
+{
+    "activityid": 1,
+    "startdate": "2025-06-12",
+    "repeat_option": "daily",
+    "hour": 17,
+    "minute": 30
+}
+
+### 37. Manually Trigger Schedule Check (Should create notifications if time matches)
+POST {{baseUrl}}/notifications/check-schedules
+Authorization: Bearer {{managerToken}}
+
+### 38. Check Pet Owner Diet Notifications
+GET {{baseUrl}}/notifications?type=diet
+Authorization: Bearer {{petOwnerToken}}
+
+### 39. Check Pet Owner Activity Notifications
+GET {{baseUrl}}/notifications?type=activity
+Authorization: Bearer {{petOwnerToken}}
+
+# ===================================================================
+# ERROR HANDLING TESTS
+# ===================================================================
+
+### 40. Try to Mark Non-existent Notification as Read
+PUT {{baseUrl}}/notifications/999/read
+Authorization: Bearer {{petOwnerToken}}
+
+### 41. Try to Delete Non-existent Notification
+DELETE {{baseUrl}}/notifications/999
+Authorization: Bearer {{petOwnerToken}}
+
+### 42. Try to Access Notifications Without Authentication
+GET {{baseUrl}}/notifications
+
+### 43. Try Invalid Pagination Parameters
+GET {{baseUrl}}/notifications?page=0&limit=1000
+Authorization: Bearer {{petOwnerToken}}
+
+### 44. Try Invalid Notification Type Filter
+GET {{baseUrl}}/notifications?type=invalid_type
+Authorization: Bearer {{petOwnerToken}}
+
+# ===================================================================
+# COMPREHENSIVE NOTIFICATION FLOW TEST
+# ===================================================================
+
+### 45. Get All Current Notifications (Pet Owner)
+GET {{baseUrl}}/notifications
+Authorization: Bearer {{petOwnerToken}}
+
+### 46. Get All Current Notifications (Service Provider)
+GET {{baseUrl}}/notifications
+Authorization: Bearer {{serviceProviderToken}}
+
+### 47. Get Complete Notification Statistics (Pet Owner)
+GET {{baseUrl}}/notifications/stats
+Authorization: Bearer {{petOwnerToken}}
+
+### 48. Get Complete Notification Statistics (Service Provider)
+GET {{baseUrl}}/notifications/stats
+Authorization: Bearer {{serviceProviderToken}}
+
+### 49. Get System-wide Notification Statistics (Manager)
+GET {{baseUrl}}/notifications/admin/stats
+Authorization: Bearer {{managerToken}}
+
+### 50. Test Notification Cleanup (Manager)
+POST {{baseUrl}}/notifications/admin/cleanup
+Authorization: Bearer {{managerToken}}
+
+# ===================================================================
+# BOOKING EXPIRY TEST (24+ hours old bookings)
+# ===================================================================
+
+### 51. Auto-reject Expired Bookings (Service Provider)
+POST {{baseUrl}}/bookings/provider/auto-reject-expired
+Authorization: Bearer {{serviceProviderToken}}
+
+### 52. Check for Expired Booking Notifications (Pet Owner)
+GET {{baseUrl}}/notifications?type=booking_expired
+Authorization: Bearer {{petOwnerToken}}
+
+# ===================================================================
+# BOOKING REMINDER TEST (Upcoming confirmed bookings)
+# ===================================================================
+
+### 53. Check for Booking Reminder Notifications (Pet Owner)
+GET {{baseUrl}}/notifications?type=booking_reminder
+Authorization: Bearer {{petOwnerToken}}
+
+# ===================================================================
+# FINAL CLEANUP AND SUMMARY
+# ===================================================================
+
+### 54. Final Notification Count (Pet Owner)
+GET {{baseUrl}}/notifications/stats
+Authorization: Bearer {{petOwnerToken}}
+
+### 55. Final Notification Count (Service Provider)
+GET {{baseUrl}}/notifications/stats
+Authorization: Bearer {{serviceProviderToken}}
+
+### 56. Mark All Final Notifications as Read (Pet Owner)
+PUT {{baseUrl}}/notifications/read-all
+Authorization: Bearer {{petOwnerToken}}
+
+### 57. Mark All Final Notifications as Read (Service Provider)
+PUT {{baseUrl}}/notifications/read-all
+Authorization: Bearer {{serviceProviderToken}}
+
+### 58. Final System Statistics (Manager)
+GET {{baseUrl}}/notifications/admin/stats
+Authorization: Bearer {{managerToken}}

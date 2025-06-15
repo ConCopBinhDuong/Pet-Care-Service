@@ -2,6 +2,7 @@ import express from 'express'
 import db from '../Database_sqlite.js';
 import authMiddleware from '../middleware/authMiddleware.js';
 import { validateServiceSubmission, validateServiceApproval, validateApprovedServiceUpdate, validateTimeslotConflicts } from '../middleware/validationMiddleware.js';
+import notificationService from '../services/notificationService.js';
 
 const router = express.Router();
 
@@ -1045,6 +1046,29 @@ router.post('/:id/review', authMiddleware, validateServiceApproval, (req, res) =
             newStatus === 'rejected' ? rejectionReason.trim() : null,
             serviceId
         );
+
+        // Send notification to service provider
+        try {
+            if (newStatus === 'approved') {
+                notificationService.notifyServiceApproved(
+                    serviceId,
+                    service.providerid,
+                    service.name,
+                    req.user.name
+                );
+            } else if (newStatus === 'rejected') {
+                notificationService.notifyServiceRejected(
+                    serviceId,
+                    service.providerid,
+                    service.name,
+                    req.user.name,
+                    rejectionReason.trim()
+                );
+            }
+        } catch (notificationError) {
+            console.error('Error sending service review notification:', notificationError);
+            // Don't fail the request if notification fails
+        }
 
         // Get updated service details
         const getServiceStmt = db.prepare(`

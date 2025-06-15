@@ -1,6 +1,7 @@
 import express from 'express'
 import db from '../Database_sqlite.js'
 import { validateBookingCreation, validateBookingUpdate } from '../middleware/validationMiddleware.js'
+import notificationService from '../services/notificationService.js'
 
 const router = express.Router();
 
@@ -230,6 +231,32 @@ router.post('/', validateBookingCreation, (req, res) => {
         });
 
         const bookingId = transaction();
+
+        // Send notification to service provider about new booking request
+        try {
+            const getProviderStmt = db.prepare(`
+                SELECT s.providerid, sp.bussiness_name, u.name as customer_name
+                FROM service s
+                JOIN serviceprovider sp ON s.providerid = sp.id
+                JOIN users u ON u.userid = ?
+                WHERE s.serviceid = ?
+            `);
+            const providerInfo = getProviderStmt.get(userId, serviceid);
+            
+            if (providerInfo) {
+                notificationService.notifyNewBooking(
+                    bookingId,
+                    providerInfo.providerid,
+                    service.name,
+                    providerInfo.customer_name,
+                    servedate,
+                    slot
+                );
+            }
+        } catch (notificationError) {
+            console.error('Error sending new booking notification:', notificationError);
+            // Don't fail the request if notification fails
+        }
 
         res.status(201).json({
             message: 'Service booking created successfully',
@@ -719,6 +746,21 @@ router.post('/provider/requests/:bookingId/accept', (req, res) => {
         
         acceptBookingStmt.run(bookingId);
 
+        // Send notification to pet owner about booking acceptance
+        try {
+            notificationService.notifyBookingAccepted(
+                booking.bookid,
+                booking.poid,
+                booking.service_name,
+                booking.provider_name,
+                booking.servedate,
+                booking.slot
+            );
+        } catch (notificationError) {
+            console.error('Error sending booking accepted notification:', notificationError);
+            // Don't fail the request if notification fails
+        }
+
         res.status(200).json({
             message: 'Booking request accepted successfully',
             bookingId: parseInt(bookingId),
@@ -791,6 +833,30 @@ router.post('/provider/requests/:bookingId/reject', (req, res) => {
         
         rejectBookingStmt.run(bookingId);
 
+        // Send notification to pet owner about booking rejection
+        try {
+            // Get provider name for notification
+            const getProviderNameStmt = db.prepare(`
+                SELECT sp.bussiness_name
+                FROM serviceprovider sp
+                WHERE sp.id = ?
+            `);
+            const providerInfo = getProviderNameStmt.get(userId);
+            
+            notificationService.notifyBookingRejected(
+                booking.bookid,
+                booking.poid,
+                booking.service_name,
+                providerInfo?.bussiness_name || 'Service Provider',
+                booking.servedate,
+                booking.slot,
+                reason
+            );
+        } catch (notificationError) {
+            console.error('Error sending booking rejected notification:', notificationError);
+            // Don't fail the request if notification fails
+        }
+
         // TODO: Log rejection reason if needed (could add a rejection_reason column to booking table)
 
         res.status(200).json({
@@ -859,9 +925,41 @@ router.post('/provider/auto-reject-expired', (req, res) => {
             UPDATE booking SET status = 'rejected' WHERE bookid = ?
         `);
 
+        // Get provider name for notifications
+        const getProviderNameStmt = db.prepare(`
+            SELECT bussiness_name FROM serviceprovider WHERE id = ?
+        `);
+        const providerInfo = getProviderNameStmt.get(userId);
+
         const rejectedBookings = [];
         expiredBookings.forEach(booking => {
             rejectBookingStmt.run(booking.bookid);
+            
+            // Send expiry notification to pet owner
+            try {
+                // Get additional booking details for notification
+                const getBookingDetailsStmt = db.prepare(`
+                    SELECT b.poid, b.servedate, b.slot
+                    FROM booking b
+                    WHERE b.bookid = ?
+                `);
+                const bookingDetails = getBookingDetailsStmt.get(booking.bookid);
+                
+                if (bookingDetails) {
+                    notificationService.notifyBookingExpired(
+                        booking.bookid,
+                        bookingDetails.poid,
+                        booking.service_name,
+                        providerInfo?.bussiness_name || 'Service Provider',
+                        bookingDetails.servedate,
+                        bookingDetails.slot
+                    );
+                }
+            } catch (notificationError) {
+                console.error('Error sending booking expired notification:', notificationError);
+                // Don't fail the request if notification fails
+            }
+            
             rejectedBookings.push({
                 bookingId: booking.bookid,
                 serviceName: booking.service_name,
