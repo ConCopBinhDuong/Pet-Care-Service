@@ -1,0 +1,221 @@
+{
+  "info": {
+    "_postman_id": "pets-test-collection",
+    "name": "Pet Care Service - Pets Tests",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Pet Management Tests",
+      "item": [
+        {
+          "name": "Create Pet",
+          "item": [
+            {
+              "name": "Add Pet - Valid Data",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{petOwnerToken}}"
+                  }
+                ],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "name",
+                      "value": "Test Pet",
+                      "type": "text"
+                    },
+                    {
+                      "key": "breed",
+                      "value": "Test Breed",
+                      "type": "text"
+                    },
+                    {
+                      "key": "age",
+                      "value": "2",
+                      "type": "text"
+                    },
+                    {
+                      "key": "description",
+                      "value": "Test Description",
+                      "type": "text"
+                    },
+                    {
+                      "key": "dob",
+                      "value": "2021-01-01",
+                      "type": "text"
+                    },
+                    {
+                      "key": "picture",
+                      "type": "file",
+                      "src": "./test-files/images/valid-pet.jpg"
+                    }
+                  ]
+                },
+                "url": "{{baseUrl}}/api/pets"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status code is 201\", function () {",
+                      "    pm.response.to.have.status(201);",
+                      "});",
+                      "pm.test(\"Pet created successfully\", function () {",
+                      "    const jsonData = pm.response.json();",
+                      "    pm.expect(jsonData.success).to.be.true;",
+                      "    pm.expect(jsonData.pet).to.have.all.keys('petid', 'name', 'breed', 'age', 'description', 'dob', 'picture');",
+                      "    pm.expect(jsonData.pet.picture).to.match(/^uploads\\/pets\\/.+\\.(jpg|jpeg|png)$/i);",
+                      "    pm.environment.set(\"testPetId\", jsonData.pet.petid);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Read Pet",
+          "item": [
+            {
+              "name": "Get Pet by ID",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{petOwnerToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/pets/{{testPetId}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status code is 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "pm.test(\"Pet details are correct\", function () {",
+                      "    const jsonData = pm.response.json();",
+                      "    pm.expect(jsonData.success).to.be.true;",
+                      "    pm.expect(jsonData.pet.picture).to.match(/^uploads\\/pets\\/.+\\.(jpg|jpeg|png)$/i);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Update Pet",
+          "item": [
+            {
+              "name": "Update Pet Details and Image",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{petOwnerToken}}"
+                  }
+                ],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "name",
+                      "value": "Updated Pet Name",
+                      "type": "text"
+                    },
+                    {
+                      "key": "breed",
+                      "value": "Updated Breed",
+                      "type": "text"
+                    },
+                    {
+                      "key": "picture",
+                      "type": "file",
+                      "src": "./test-files/images/updated-pet.jpg"
+                    }
+                  ]
+                },
+                "url": "{{baseUrl}}/api/pets/{{testPetId}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status code is 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "pm.test(\"Pet updated successfully\", function () {",
+                      "    const jsonData = pm.response.json();",
+                      "    pm.expect(jsonData.success).to.be.true;",
+                      "    pm.expect(jsonData.pet.picture).to.match(/^uploads\\/pets\\/.+\\.(jpg|jpeg|png)$/i);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Delete Pet",
+          "item": [
+            {
+              "name": "Delete Pet and Image",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{petOwnerToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/pets/{{testPetId}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status code is 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "pm.test(\"Pet deleted successfully\", function () {",
+                      "    const jsonData = pm.response.json();",
+                      "    pm.expect(jsonData.success).to.be.true;",
+                      "    pm.expect(jsonData.message).to.include('deleted');",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "exec": [
+          "pm.environment.set(\"baseUrl\", \"https://localhost:8443\");"
+        ]
+      }
+    }
+  ]
+}
