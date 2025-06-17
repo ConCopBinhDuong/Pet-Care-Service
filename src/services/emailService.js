@@ -1,34 +1,23 @@
-import nodemailer from 'nodemailer';
+import sgMail from '@sendgrid/mail';
 import crypto from 'crypto';
 
 class EmailService {
     constructor() {
-        // Configure email transporter
-        // For development, we'll use a test account or console output
-        // In production, configure with real SMTP settings
-        this.transporter = this.createTransporter();
+        // Configure SendGrid or fallback to development mode
+        this.initializeSendGrid();
     }
 
-    createTransporter() {
-        // For development - create a test account
-        // In production, replace with your SMTP configuration
-        if (process.env.NODE_ENV === 'production') {
-            return nodemailer.createTransport({
-                host: process.env.SMTP_HOST,
-                port: parseInt(process.env.SMTP_PORT) || 587,
-                secure: false,
-                auth: {
-                    user: process.env.SMTP_USER,
-                    pass: process.env.SMTP_PASS
-                }
-            });
-        } else {
-            // Development mode - log emails to console
-            return nodemailer.createTransport({
-                streamTransport: true,
-                newline: 'unix',
-                buffer: true
-            });
+    initializeSendGrid() {
+        // Check if SendGrid API key is provided
+        if (process.env.SENDGRID_API_KEY) {
+            console.log('📧 Configuring SendGrid for email sending...');
+            sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+            this.emailService = 'sendgrid';
+        } 
+        // Development mode - log emails to console
+        else {
+            console.log('📧 Using development mode - emails will be logged to console');
+            this.emailService = 'development';
         }
     }
 
@@ -37,66 +26,34 @@ class EmailService {
         return Math.floor(100000 + Math.random() * 900000).toString();
     }
 
-    generatePhoneVerificationCode() {
-        // Generate a 6-digit verification code (same as email for consistency)
-        return Math.floor(100000 + Math.random() * 900000).toString();
-    }
-
     async sendEmailVerification(email, code, userName) {
+        const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@petcare.com';
         const mailOptions = {
-            from: process.env.EMAIL_FROM || 'noreply@petcare.com',
+            from: fromEmail,
             to: email,
             subject: 'Verify Your Email Address - Pet Care Service',
             html: this.getEmailVerificationTemplate(code, userName)
         };
 
         try {
-            if (process.env.NODE_ENV === 'production') {
-                const info = await this.transporter.sendMail(mailOptions);
-                console.log('Email verification sent:', info.messageId);
-                return { success: true, messageId: info.messageId };
+            // If SendGrid is configured, send real email
+            if (this.emailService === 'sendgrid') {
+                const result = await sgMail.send(mailOptions);
+                console.log('✅ Email verification sent via SendGrid:', result[0].statusCode);
+                return { success: true, messageId: result[0].headers['x-message-id'] || 'sendgrid-success' };
             } else {
                 // Development mode - log to console
                 console.log('\n📧 Email Verification Code (Development Mode)');
                 console.log('===============================================');
                 console.log(`To: ${email}`);
+                console.log(`From: ${fromEmail}`);
                 console.log(`Subject: ${mailOptions.subject}`);
                 console.log(`Verification Code: ${code}`);
                 console.log('===============================================\n');
                 return { success: true, messageId: 'dev-mode-email' };
             }
         } catch (error) {
-            console.error('Email sending failed:', error);
-            return { success: false, error: error.message };
-        }
-    }
-
-    async sendPhoneVerification(phone, code) {
-        // In a real application, integrate with SMS service like Twilio, AWS SNS, etc.
-        // For development, we'll log to console
-        try {
-            if (process.env.NODE_ENV === 'production') {
-                // TODO: Integrate with SMS service
-                // Example with Twilio:
-                // const twilioClient = require('twilio')(accountSid, authToken);
-                // await twilioClient.messages.create({
-                //     body: `Your Pet Care verification code is: ${code}`,
-                //     from: process.env.TWILIO_PHONE_NUMBER,
-                //     to: phone
-                // });
-                console.log(`SMS would be sent to ${phone} with code: ${code}`);
-                return { success: true, messageId: 'sms-sent' };
-            } else {
-                // Development mode - log to console
-                console.log('\n📱 SMS Verification Code (Development Mode)');
-                console.log('============================================');
-                console.log(`To: ${phone}`);
-                console.log(`Message: Your Pet Care verification code is: ${code}`);
-                console.log('============================================\n');
-                return { success: true, messageId: 'dev-mode-sms' };
-            }
-        } catch (error) {
-            console.error('SMS sending failed:', error);
+            console.error('❌ Email sending failed:', error);
             return { success: false, error: error.message };
         }
     }
@@ -148,29 +105,32 @@ class EmailService {
     }
 
     async sendWelcomeEmail(email, userName, userRole) {
+        const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@petcare.com';
         const mailOptions = {
-            from: process.env.EMAIL_FROM || 'noreply@petcare.com',
+            from: fromEmail,
             to: email,
             subject: 'Welcome to Pet Care Service! 🐾',
             html: this.getWelcomeEmailTemplate(userName, userRole)
         };
 
         try {
-            if (process.env.NODE_ENV === 'production') {
-                const info = await this.transporter.sendMail(mailOptions);
-                console.log('Welcome email sent:', info.messageId);
-                return { success: true, messageId: info.messageId };
+            // If SendGrid is configured, send real email
+            if (this.emailService === 'sendgrid') {
+                const result = await sgMail.send(mailOptions);
+                console.log('✅ Welcome email sent via SendGrid:', result[0].statusCode);
+                return { success: true, messageId: result[0].headers['x-message-id'] || 'sendgrid-success' };
             } else {
                 console.log('\n🎉 Welcome Email (Development Mode)');
                 console.log('===================================');
                 console.log(`To: ${email}`);
+                console.log(`From: ${fromEmail}`);
                 console.log(`Subject: ${mailOptions.subject}`);
                 console.log(`User: ${userName} (${userRole})`);
                 console.log('===================================\n');
                 return { success: true, messageId: 'dev-mode-welcome' };
             }
         } catch (error) {
-            console.error('Welcome email sending failed:', error);
+            console.error('❌ Welcome email sending failed:', error);
             return { success: false, error: error.message };
         }
     }
@@ -238,23 +198,26 @@ class EmailService {
     }
 
     async sendPasswordResetVerification(email, code, userName) {
+        const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@petcare.com';
         const mailOptions = {
-            from: process.env.EMAIL_FROM || 'noreply@petcare.com',
+            from: fromEmail,
             to: email,
             subject: 'Password Reset Request - Pet Care Service',
             html: this.getPasswordResetTemplate(code, userName)
         };
 
         try {
-            if (process.env.NODE_ENV === 'production') {
-                const info = await this.transporter.sendMail(mailOptions);
-                console.log('Password reset email sent:', info.messageId);
-                return { success: true, messageId: info.messageId };
+            // If SendGrid is configured, send real email
+            if (this.emailService === 'sendgrid') {
+                const result = await sgMail.send(mailOptions);
+                console.log('✅ Password reset email sent via SendGrid:', result[0].statusCode);
+                return { success: true, messageId: result[0].headers['x-message-id'] || 'sendgrid-success' };
             } else {
                 // Development mode - log to console
                 console.log('\n🔐 Password Reset Verification Code (Development Mode)');
                 console.log('=====================================================');
                 console.log(`To: ${email}`);
+                console.log(`From: ${fromEmail}`);
                 console.log(`Subject: ${mailOptions.subject}`);
                 console.log(`User: ${userName}`);
                 console.log(`Verification Code: ${code}`);
@@ -262,7 +225,7 @@ class EmailService {
                 return { success: true, messageId: 'dev-mode-password-reset' };
             }
         } catch (error) {
-            console.error('Password reset email sending failed:', error);
+            console.error('❌ Password reset email sending failed:', error);
             return { success: false, error: error.message };
         }
     }
@@ -347,6 +310,25 @@ class EmailService {
         </body>
         </html>
         `;
+    }
+
+    /**
+     * Test SendGrid connection (useful for debugging)
+     */
+    async testConnection() {
+        try {
+            if (this.emailService === 'sendgrid') {
+                // SendGrid doesn't have a direct connection test, so we'll just verify API key is set
+                console.log('✅ SendGrid API key is configured');
+                return { success: true, message: 'SendGrid API key configured successfully' };
+            } else {
+                console.log('📧 Development mode - no real email connection to test');
+                return { success: true, message: 'Development mode - console logging enabled' };
+            }
+        } catch (error) {
+            console.error('❌ SendGrid connection test failed:', error);
+            return { success: false, error: error.message };
+        }
     }
 }
 

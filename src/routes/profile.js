@@ -8,8 +8,8 @@ const router = express.Router();
 // Note: authMiddleware is applied at the router level in server.js
 router.get('/', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
 
         // Get basic user info
         const getUserStmt = db.prepare(`SELECT userid, name, email, gender, role FROM users WHERE userid = ?`);
@@ -73,8 +73,8 @@ router.get('/', (req, res) => {
 // Update user profile (protected route)
 router.put('/', validateProfileUpdate, (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const updates = req.body;
 
         // Start transaction
@@ -157,8 +157,8 @@ router.put('/', validateProfileUpdate, (req, res) => {
 // Delete user account (protected route)
 router.delete('/', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
 
         // Start transaction
         db.exec('BEGIN TRANSACTION');
