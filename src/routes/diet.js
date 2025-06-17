@@ -7,8 +7,8 @@ const router = express.Router();
 // Get all diets for a specific pet
 router.get('/pet/:petId', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const petId = parseInt(req.params.petId);
 
         // Only pet owners can access this endpoint
@@ -62,8 +62,8 @@ router.get('/pet/:petId', (req, res) => {
 // Get all diets for all pets of the authenticated user
 router.get('/', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
 
         // Only pet owners can access this endpoint
         if (userRole !== 'Pet owner') {
@@ -96,8 +96,8 @@ router.get('/', (req, res) => {
 // Add a new diet for a specific pet
 router.post('/pet/:petId', validateDietCreation, (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const petId = parseInt(req.params.petId);
         const { name, amount, description } = req.body;
 
@@ -175,8 +175,8 @@ router.post('/pet/:petId', validateDietCreation, (req, res) => {
 // Get a specific diet by ID
 router.get('/:dietId', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const dietId = parseInt(req.params.dietId);
 
         // Only pet owners can access this endpoint
@@ -228,8 +228,8 @@ router.get('/:dietId', (req, res) => {
 // Update a specific diet
 router.put('/:dietId', validateDietUpdate, (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const dietId = parseInt(req.params.dietId);
         const updates = req.body;
 
@@ -313,8 +313,8 @@ router.put('/:dietId', validateDietUpdate, (req, res) => {
 // Delete a specific diet
 router.delete('/:dietId', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const dietId = parseInt(req.params.dietId);
 
         // Only pet owners can delete diets

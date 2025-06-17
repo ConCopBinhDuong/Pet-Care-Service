@@ -7,8 +7,8 @@ const router = express.Router();
 // Get all bookings for the authenticated pet owner
 router.get('/', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
 
         // Only pet owners can access this endpoint
         if (userRole !== 'Pet owner') {
@@ -71,8 +71,8 @@ router.get('/', (req, res) => {
 // Get booking details by ID
 router.get('/:bookingId', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const { bookingId } = req.params;
 
         // Only pet owners can access this endpoint
@@ -143,8 +143,8 @@ router.get('/:bookingId', (req, res) => {
 // Create a new service booking (Reserve service endpoint)
 router.post('/', validateBookingCreation, (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
 
         // Only pet owners can make bookings
         if (userRole !== 'Pet owner') {
@@ -257,8 +257,8 @@ router.post('/', validateBookingCreation, (req, res) => {
 // Update booking status or details
 router.put('/:bookingId', validateBookingUpdate, (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const { bookingId } = req.params;
         const { servedate, payment_method, status } = req.body;
 
@@ -336,8 +336,8 @@ router.put('/:bookingId', validateBookingUpdate, (req, res) => {
 // Cancel a booking
 router.delete('/:bookingId', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;;
         const { bookingId } = req.params;
 
         // Only pet owners can cancel their bookings
