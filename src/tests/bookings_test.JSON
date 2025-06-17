@@ -1,0 +1,202 @@
+{
+  "info": {
+    "_postman_id": "bookings-test-collection",
+    "name": "Pet Care Service - Bookings Tests",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Create Booking",
+      "item": [
+        {
+          "name": "Create Booking - Success",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{petOwnerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"serviceid\": {{serviceId}},\n    \"petid\": {{petId}},\n    \"startdate\": \"2025-06-20\",\n    \"enddate\": \"2025-06-21\",\n    \"status\": \"Pending\",\n    \"notes\": \"Test booking\"\n}"
+            },
+            "url": "{{baseUrl}}/api/bookings"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test(\"Booking created successfully\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "    pm.expect(jsonData.booking).to.have.property('bookingid');",
+                  "    pm.environment.set(\"testBookingId\", jsonData.booking.bookingid);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Get Bookings",
+      "item": [
+        {
+          "name": "Get All Bookings - Pet Owner",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{petOwnerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/bookings"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Returns array of bookings\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "    pm.expect(jsonData.bookings).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get All Bookings - Service Provider",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{serviceProviderToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/bookings"
+          }
+        },
+        {
+          "name": "Get Booking by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{petOwnerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/bookings/{{testBookingId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Update Booking",
+      "item": [
+        {
+          "name": "Update Booking Status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{serviceProviderToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"status\": \"Confirmed\",\n    \"notes\": \"Booking confirmed\"\n}"
+            },
+            "url": "{{baseUrl}}/api/bookings/{{testBookingId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Booking updated successfully\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "    pm.expect(jsonData.booking.status).to.eql('Confirmed');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Cancel Booking",
+      "item": [
+        {
+          "name": "Cancel Booking - Pet Owner",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{petOwnerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/bookings/{{testBookingId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Booking cancelled successfully\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "    pm.expect(jsonData.message).to.include('cancelled');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "exec": [
+          "pm.environment.set(\"baseUrl\", \"https://localhost:8443\");"
+        ]
+      }
+    }
+  ]
+}

@@ -1,11 +1,12 @@
 import express from 'express'
 import db from '../Database_sqlite.js'
 import { validateActivityCreation, validateActivityUpdate } from '../middleware/validationMiddleware.js'
+import authMiddleware from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
 // Get all activities for the authenticated pet owner
-router.get('/', (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -13,7 +14,8 @@ router.get('/', (req, res) => {
         // Only pet owners can access this endpoint
         if (userRole !== 'Pet owner') {
             return res.status(403).json({ 
-                message: 'Access denied. Only pet owners can manage activities.' 
+                message: 'Access denied. Only pet owners can manage activities.',
+                role: userRole
             });
         }
 
@@ -43,8 +45,8 @@ router.get('/', (req, res) => {
 // Get activities for a specific pet
 router.get('/pet/:petId', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const petId = parseInt(req.params.petId);
 
         // Only pet owners can access this endpoint
@@ -101,8 +103,8 @@ router.get('/pet/:petId', (req, res) => {
 // Add a new activity for a specific pet
 router.post('/pet/:petId', validateActivityCreation, (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const petId = parseInt(req.params.petId);
         const { name, description } = req.body;
 
@@ -181,8 +183,8 @@ router.post('/pet/:petId', validateActivityCreation, (req, res) => {
 // Get a specific activity by ID
 router.get('/:activityId', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const activityId = parseInt(req.params.activityId);
 
         // Only pet owners can access this endpoint
@@ -233,8 +235,8 @@ router.get('/:activityId', (req, res) => {
 // Update a specific activity
 router.put('/:activityId', validateActivityUpdate, (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const activityId = parseInt(req.params.activityId);
         const updates = req.body;
 
@@ -326,8 +328,8 @@ router.put('/:activityId', validateActivityUpdate, (req, res) => {
 // Delete a specific activity
 router.delete('/:activityId', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const activityId = parseInt(req.params.activityId);
 
         // Only pet owners can delete activities

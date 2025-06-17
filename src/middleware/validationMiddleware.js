@@ -376,6 +376,53 @@ export const validateActivityUpdate = (req, res, next) => {
 };
 
 /**
+ * Validate service creation data
+ */
+
+export const validateServiceCreation = (req, res, next) => {
+    const { name, price, duration, typeid, timeSlots } = req.body;
+    const errors = [];
+
+    if (!name || name.trim().length < 3) {
+        errors.push('Service name must be at least 3 characters long');
+    }
+
+    if (!price || isNaN(price) || price <= 0) {
+        errors.push('Service price must be a positive number');
+    }
+
+    if (!duration || !duration.match(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)) {
+        errors.push('Duration must be in HH:MM format');
+    }
+
+    if (!typeid || !Number.isInteger(Number(typeid))) {
+        errors.push('Valid service type ID is required');
+    }
+
+    if (!Array.isArray(timeSlots) || timeSlots.length === 0) {
+        errors.push('At least one time slot is required');
+    } else {
+        // Validate each time slot format (HH:MM)
+        const timeFormat = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+        for (const slot of timeSlots) {
+            if (!timeFormat.test(slot)) {
+                errors.push('Time slots must be in HH:MM format');
+                break;
+            }
+        }
+    }
+
+    if (errors.length > 0) {
+        return res.status(400).json({
+            success: false,
+            errors: errors
+        });
+    }
+
+    next();
+};
+
+/**
  * Validate booking creation data
  */
 export const validateBookingCreation = (req, res, next) => {

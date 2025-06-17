@@ -29,6 +29,112 @@ router.get('/types', (req, res) => {
     }
 });
 
+// Add a new service (Service Provider only)
+router.post('/', authMiddleware, validateServiceCreation, (req, res) => {
+    try {
+        const userId = req.user.userid;
+        const userRole = req.user.role;
+
+        // Only service providers can add services
+        if (userRole !== 'Service provider') {
+            return res.status(403).json({
+                message: 'Access denied. Only service providers can add services.'
+            });
+        }
+
+        const { 
+            name, 
+            price, 
+            description, 
+            duration, 
+            typeid, 
+            timeSlots 
+        } = req.body;
+
+        // Start transaction
+        db.exec('BEGIN TRANSACTION');
+
+        try {
+            // Insert service
+            const insertServiceStmt = db.prepare(`
+                INSERT INTO service (name, price, description, duration, typeid, providerid)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `);
+
+            const result = insertServiceStmt.run(
+                name,
+                price,
+                description || null,
+                duration,
+                typeid,
+                userId
+            );
+
+            const serviceId = result.lastInsertRowid;
+
+            // Add time slots
+            const insertTimeSlotStmt = db.prepare(`
+                INSERT INTO timeslot (serviceid, slot)
+                VALUES (?, ?)
+            `);
+
+            for (const slot of timeSlots) {
+                insertTimeSlotStmt.run(serviceId, slot);
+            }
+
+            // Get the newly created service
+            const getServiceStmt = db.prepare(`
+                SELECT 
+                    s.serviceid,
+                    s.name,
+                    s.price,
+                    s.description,
+                    s.duration,
+                    s.typeid,
+                    st.type as service_type,
+                    s.providerid,
+                    sp.bussiness_name as provider_name
+                FROM service s
+                JOIN servicetype st ON s.typeid = st.typeid
+                JOIN serviceprovider sp ON s.providerid = sp.id
+                WHERE s.serviceid = ?
+            `);
+
+            const newService = getServiceStmt.get(serviceId);
+
+            // Get the time slots
+            const getTimeSlotsStmt = db.prepare(`
+                SELECT slot
+                FROM timeslot
+                WHERE serviceid = ?
+                ORDER BY slot ASC
+            `);
+
+            const serviceTimeSlots = getTimeSlotsStmt.all(serviceId);
+
+            db.exec('COMMIT');
+
+            res.status(201).json({
+                message: 'Service created successfully',
+                service: {
+                    ...newService,
+                    timeSlots: serviceTimeSlots.map(ts => ts.slot)
+                }
+            });
+
+        } catch (err) {
+            db.exec('ROLLBACK');
+            throw err;
+        }
+
+    } catch (error) {
+        console.error('Error creating service:', error);
+        res.status(500).json({
+            message: 'Internal server error while creating service'
+        });
+    }
+});
+
 // Get all services with optional filtering by multiple service types and name search
 router.get('/', (req, res) => {
     try {

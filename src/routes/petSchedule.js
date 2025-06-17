@@ -48,8 +48,8 @@ router.get('/', (req, res) => {
 // Get schedules for a specific pet
 router.get('/pet/:petId', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const petId = parseInt(req.params.petId);
 
         // Only pet owners can access this endpoint
@@ -112,8 +112,8 @@ router.get('/pet/:petId', (req, res) => {
 // Add a new schedule for a diet or activity
 router.post('/', validateScheduleCreation, (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const { startdate, repeat_option, hour, minute, dietid, activityid } = req.body;
 
         // Only pet owners can add schedules
@@ -217,8 +217,8 @@ router.post('/', validateScheduleCreation, (req, res) => {
 // Get a specific schedule by ID
 router.get('/:scheduleId', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const scheduleId = parseInt(req.params.scheduleId);
 
         // Only pet owners can access this endpoint
@@ -276,8 +276,8 @@ router.get('/:scheduleId', (req, res) => {
 // Update a specific schedule
 router.put('/:scheduleId', validateScheduleUpdate, (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const scheduleId = parseInt(req.params.scheduleId);
         const updates = req.body;
 
@@ -371,8 +371,8 @@ router.put('/:scheduleId', validateScheduleUpdate, (req, res) => {
 // Delete a specific schedule
 router.delete('/:scheduleId', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const scheduleId = parseInt(req.params.scheduleId);
 
         // Only pet owners can delete schedules
