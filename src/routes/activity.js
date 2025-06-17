@@ -10,7 +10,6 @@ router.get('/', authMiddleware, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
-        console.log(`User ID: ${userId}, Role: ${userRole}`);
 
         // Only pet owners can access this endpoint
         if (userRole !== 'Pet owner') {

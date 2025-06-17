@@ -19,9 +19,17 @@ import profileRoutes from './routes/profile.js'
 import petsRoutes from './routes/pets.js'
 import dietRoutes from './routes/diet.js'
 import activityRoutes from './routes/activity.js'
-import scheduleRoutes from './routes/schedule.js' 
+import petScheduleRoutes from './routes/petSchedule.js' 
+import scheduleDashboardRoutes from './routes/scheduleDashboard.js'
 import servicesRoutes from './routes/services.js'
 import bookingsRoutes from './routes/bookings.js'
+import reviewsRoutes from './routes/reviews.js'
+import reportsRoutes from './routes/reports.js'
+import notificationsRoutes from './routes/notifications.js'
+import chatRoutes from './routes/chat.js'
+
+// Service imports
+import notificationScheduler from './services/notificationScheduler.js'
 
 const app = express() ; 
 const HTTP_PORT = process.env.PORT || 8383 ;
@@ -58,11 +66,11 @@ try {
     
 
 } catch (error) {
-    console.error('❌ Failed to load self-signed SSL certificates:', error.message);
-    console.log('\n🔧 To generate self-signed certificates, run:');
+    console.error('Failed to load self-signed SSL certificates:', error.message);
+    console.log('\n To generate self-signed certificates, run:');
     console.log('   chmod +x generate_ssl.sh');
     console.log('   ./generate_ssl.sh');
-    console.log('\n💡 Files should be located at:');
+    console.log('\n Files should be located at:');
     console.log(`   Key: ${sslKeyPath}`);
     console.log(`   Cert: ${sslCertPath}`);
     process.exit(1);
@@ -92,13 +100,18 @@ if (NODE_ENV === 'production' && httpsOptions) {
 
 // API Routes with specific rate limiting for auth routes
 app.use('/api/auth', authLimiter, authRoutes);
-app.use('/api/profile', authMiddleware, requireEmailVerification, profileRoutes);
-app.use('/api/pets', authMiddleware, requireFullVerification, petsRoutes);
-app.use('/api/diet', authMiddleware, requireFullVerification, dietRoutes);
-app.use('/api/activity', authMiddleware, requireFullVerification, activityRoutes);
-app.use('/api/schedule', authMiddleware, requireFullVerification, scheduleRoutes);
+app.use('/api/profile', authMiddleware,  profileRoutes);
+app.use('/api/pets', authMiddleware,  petsRoutes);
+app.use('/api/diet', authMiddleware,  dietRoutes);
+app.use('/api/activity', authMiddleware,  activityRoutes);
+app.use('/api/pet-schedule', authMiddleware,  petScheduleRoutes);
+app.use('/api/schedule', scheduleDashboardRoutes);  // Schedule dashboard with embedded auth
 app.use('/api/services', servicesRoutes);  // Public access for browsing services
-app.use('/api/bookings', authMiddleware, requireFullVerification, bookingsRoutes);  // Requires full verification
+app.use('/api/bookings', authMiddleware,  bookingsRoutes);  // Requires full verification
+app.use('/api/reviews', authMiddleware,  reviewsRoutes);  // Requires full verification
+app.use('/api/reports', authMiddleware, reportsRoutes);  // Requires full verification
+app.use('/api/notifications', notificationsRoutes);  // Notification management
+app.use('/api/chat', authMiddleware, chatRoutes);  // Chat between pet owners and service providers
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -118,17 +131,21 @@ app.use(errorHandler);
 
 // Start HTTPS server only
 if (!httpsOptions) {
-    console.error('❌ SSL certificates are required. Server cannot start without HTTPS.');
+    console.error(' SSL certificates are required. Server cannot start without HTTPS.');
     process.exit(1);
 }
 
-https.createServer(httpsOptions, app).listen(HTTPS_PORT, () => {
-    console.log(`🔒 HTTPS Server running on port: ${HTTPS_PORT} (self-signed certificates)`);
-    console.log(`🔗 Secure API: https://localhost:${HTTPS_PORT}/api`);
-    console.log(`🏥 Health check: https://localhost:${HTTPS_PORT}/health`);
-    console.log(`⚠️  Browser warning expected with self-signed certificates`);
-    console.log(`🌐 Access via: https://localhost:${HTTPS_PORT}`);
-    console.log(`🔐 HTTPS-only mode: No HTTP server running`);
+https.createServer(httpsOptions, app).listen(HTTPS_PORT, async () => {
+    console.log(`HTTPS Server running on port: ${HTTPS_PORT} (self-signed certificates)`);
+    console.log(`Secure API: https://localhost:${HTTPS_PORT}/api`);
+    console.log(`Health check: https://localhost:${HTTPS_PORT}/health`);
+    console.log(`Browser warning expected with self-signed certificates`);
+    console.log(`Access via: https://localhost:${HTTPS_PORT}`);
+    console.log(`HTTPS-only mode: No HTTP server running`);
+    
+    // Start notification scheduler
+    console.log('🔔 Starting notification scheduler...');
+    notificationScheduler.start();
     
     if (NODE_ENV === 'development') {
         console.log('\n💡 Development Tips:');
