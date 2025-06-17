@@ -19,8 +19,10 @@
     "express": "^5.1.0",
     "express-rate-limit": "^7.5.0",
     "express-validator": "^7.2.1",
+    "fs": "^0.0.1-security",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.1",
     "nodemailer": "^7.0.3",
     "pg": "^8.16.0",
     "prisma": "^6.8.2"
