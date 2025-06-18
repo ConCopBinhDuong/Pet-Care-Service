@@ -6,6 +6,59 @@ import notificationService from '../services/notificationService.js';
 
 const router = express.Router();
 
+//initialize service types (Manager only)
+router.post('/initialize', authMiddleware, async (req, res) => {
+    try {
+        const userRole = req.user.role;
+        
+        // Only manager can initialize service types
+        if (userRole !== 'Manager') {
+            return res.status(403).json({
+                message: 'Access denied. Manager only.'
+            });
+        }
+
+        const { serviceTypes } = req.body;
+
+        if (!Array.isArray(serviceTypes)) {
+            return res.status(400).json({
+                message: 'Invalid service types format'
+            });
+        }
+
+        // Start transaction using better-sqlite3 syntax
+        const transaction = db.prepare(`
+            INSERT OR REPLACE INTO servicetype (type) VALUES (?)
+        `);
+
+        try {
+            db.prepare('BEGIN').run();
+            
+            // Execute inserts within transaction
+            serviceTypes.forEach(serviceType => {
+                transaction.run(serviceType.type);
+            });
+            
+            db.prepare('COMMIT').run();
+
+            res.status(200).json({
+                message: 'Service types initialized',
+                types: serviceTypes
+            });
+
+        } catch (error) {
+            db.prepare('ROLLBACK').run();
+            throw error;
+        }
+
+    } catch (error) {
+        console.error('Error initializing service types:', error);
+        res.status(500).json({ 
+            message: 'Internal server error while initializing service types' 
+        });
+    }
+});
+
 // Get all service types
 router.get('/types', (req, res) => {
     try {
@@ -30,7 +83,7 @@ router.get('/types', (req, res) => {
 });
 
 // Add a new service (Service Provider only)
-router.post('/', authMiddleware, validateServiceCreation, (req, res) => {
+router.post('/', authMiddleware, validateServiceSubmission, (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
