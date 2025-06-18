@@ -9,22 +9,19 @@ import authMiddleware from '../middleware/authMiddleware.js';
 const router = express.Router();
 
 
-//helper function to check for valid image file
-// Configure multer for file uploads
-const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-    fileFilter: (req, file, cb) => {
-        const allowedTypes = /jpeg|jpg|png/;
-        const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-        const mimetype = allowedTypes.test(file.mimetype);
-
-        if (extname && mimetype) {
-            return cb(null, true);
-        }
-        cb(new Error('Only .png, .jpg and .jpeg format allowed!'));
-    }
-})
+// Helper function to validate base64 image
+const validateBase64Image = (base64String) => {
+    if (!base64String) return false;
+    
+    // Check if it's a valid base64 image format
+    const isValidFormat = /^data:image\/(jpeg|jpg|png);base64,/.test(base64String);
+    if (!isValidFormat) return false;
+    
+    // Check file size (5MB limit)
+    const base64Data = base64String.split(',')[1];
+    const fileSize = (base64Data.length * 3) / 4; // Approximate size in bytes
+    return fileSize <= 5 * 1024 * 1024; // 5MB limit
+};
 
 // Get all pets for the authenticated pet owner
 router.get('/', (req, res) => {
@@ -60,11 +57,11 @@ router.get('/', (req, res) => {
 });
 
 // Add a new pet for the authenticated pet owner
-router.post('/', authMiddleware, upload.single('picture'), async (req, res) => {
+router.post('/', authMiddleware, async (req, res) => {
     let filepath = null;
     try {
         const { userid: userId, role: userRole } = req.user;
-        const { name, breed, age, description, dob } = req.body;
+        const { name, breed, age, description, dob, picture } = req.body; // picture is now base64
 
         // Validate required fields
         if (!name || !breed) {
@@ -74,11 +71,11 @@ router.post('/', authMiddleware, upload.single('picture'), async (req, res) => {
             });
         }
 
-        // Check image upload
-        if (!req.file) {
+        // Validate image
+        if (!picture || !validateBase64Image(picture)) {
             return res.status(400).json({
                 success: false,
-                error: 'Pet picture is required'
+                error: 'Valid pet picture (base64) is required. Must be JPG/PNG under 5MB'
             });
         }
 
@@ -101,21 +98,26 @@ router.post('/', authMiddleware, upload.single('picture'), async (req, res) => {
             });
         }
 
-        // Handle file upload
+       // Handle base64 image
         const uploadDir = 'uploads/pets';
         if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
         }
 
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const filename = `pet-${uniqueSuffix}${path.extname(req.file.originalname)}`;
+        const fileExtension = picture.match(/^data:image\/(jpeg|jpg|png)/)[1];
+        const filename = `pet-${uniqueSuffix}.${fileExtension}`;
         filepath = path.join(uploadDir, filename);
-        
+
+        // Convert base64 to buffer
+        const base64Data = picture.split(',')[1];
+        const imageBuffer = Buffer.from(base64Data, 'base64');
+
         // Start transaction
         db.prepare('BEGIN').run();
 
         // Save file to disk
-        fs.writeFileSync(filepath, req.file.buffer);
+        fs.writeFileSync(filepath, imageBuffer);
 
         // Insert new pet
         const insertPetStmt = db.prepare(`
@@ -238,14 +240,14 @@ router.get('/:petId', (req, res) => {
     }
 });
 
-router.put('/:id', authMiddleware, upload.single('picture'), async (req, res) => {
+router.put('/:id', authMiddleware, async (req, res) => {
     let newFilepath = null;
     let oldPicturePath = null;
     
     try {
         const petId = req.params.id;
         const { userid: userId, role: userRole } = req.user;
-        const { name, breed, age, description, dob } = req.body;
+        const { name, breed, age, description, dob, picture } = req.body;
 
         // Verify user role
         if (userRole !== 'Pet owner') {
@@ -280,14 +282,22 @@ router.put('/:id', authMiddleware, upload.single('picture'), async (req, res) =>
         if (dob) { updateFields.push('dob = ?'); params.push(dob); }
 
         // Handle image upload if provided
-        if (req.file) {
+         if (picture) {
+            if (!validateBase64Image(picture)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Invalid image format or size. Must be JPG/PNG under 5MB'
+                });
+            }
+
             const uploadDir = 'uploads/pets';
             if (!fs.existsSync(uploadDir)) {
                 fs.mkdirSync(uploadDir, { recursive: true });
             }
 
             const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-            const filename = `pet-${uniqueSuffix}${path.extname(req.file.originalname)}`;
+            const fileExtension = picture.match(/^data:image\/(jpeg|jpg|png)/)[1];
+            const filename = `pet-${uniqueSuffix}.${fileExtension}`;
             newFilepath = path.join(uploadDir, filename);
             
             // Store old picture path for cleanup
@@ -299,19 +309,14 @@ router.put('/:id', authMiddleware, upload.single('picture'), async (req, res) =>
             params.push(relativePath);
         }
 
-        if (updateFields.length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'No fields to update'
-            });
-        }
-
         // Start transaction
         db.prepare('BEGIN').run();
 
         // Save new image if exists
-        if (req.file) {
-            fs.writeFileSync(newFilepath, req.file.buffer);
+        if (picture) {
+            const base64Data = picture.split(',')[1];
+            const imageBuffer = Buffer.from(base64Data, 'base64');
+            fs.writeFileSync(newFilepath, imageBuffer);
         }
 
         // Update pet record
