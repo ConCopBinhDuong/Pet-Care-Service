@@ -1,0 +1,105 @@
+### Test Gmail Email API Integration
+
+### Test 1: Test Gmail Connection
+GET https://localhost:8443/api/auth/test-email-connection
+Accept: application/json
+
+###
+
+### Test 2: Send Verification Email (via registration)
+POST https://localhost:8443/api/auth/register
+Content-Type: application/json
+
+{
+    "fullName": "Test User Gmail",
+    "email": "testuseremailgmail@example.com",
+    "password": "TestPassword123!",
+    "userRole": "Pet owner"
+}
+
+###
+
+### Test 3: Send Password Reset Email
+POST https://localhost:8443/api/auth/request-password-reset
+Content-Type: application/json
+
+{
+    "email": "testuseremailgmail@example.com"
+}
+
+###
+
+### Test 4: Send Email Verification (manually)
+POST https://localhost:8443/api/auth/send-verification
+Content-Type: application/json
+
+{
+    "email": "testuseremailgmail@example.com"
+}
+
+###
+
+### Test 5: Test with your VGU email
+POST https://localhost:8443/api/auth/register
+Content-Type: application/json
+
+{
+    "fullName": "Thanh Test User",
+    "email": "10422110@student.vgu.edu.vn",
+    "password": "TestPassword123!",
+    "userRole": "Pet owner"
+}
+
+###
+
+### Test 6: Send OTP to your personal Gmail (thanhnhan1662004@gmail.com)
+POST https://localhost:8443/api/auth/register
+Content-Type: application/json
+
+{
+    "fullName": "Thanh Personal Test",
+    "email": "thanhnhan1662004@gmail.com",
+    "password": "TestPassword123!",
+    "userRole": "Pet owner"
+}
+
+###
+
+### Test 7: Send welcome email after verification (Personal Gmail)
+# First register with your personal email, then verify with the code you receive
+POST https://localhost:8443/api/auth/verify-email
+Content-Type: application/json
+
+{
+    "email": "thanhnhan1662004@gmail.com",
+    "code": "123456"
+}
+
+###
+
+### Test 8: Test password reset for your personal Gmail
+POST https://localhost:8443/api/auth/request-password-reset
+Content-Type: application/json
+
+{
+    "email": "thanhnhan1662004@gmail.com"
+}
+
+###
+
+### Test 9: Send verification email manually to personal Gmail
+POST https://localhost:8443/api/auth/send-verification
+Content-Type: application/json
+
+{
+    "email": "thanhnhan1662004@gmail.com"
+}
+
+###
+
+# Notes:
+# 1. Make sure your server is running on https://localhost:8443
+# 2. Check the server console for Gmail logs
+# 3. Check your Gmail inbox (10422110@student.vgu.edu.vn) for emails
+# 4. The Gmail credentials are configured in .env file
+# 5. All emails will be sent from 10422110@student.vgu.edu.vn

@@ -1,23 +1,34 @@
-import sgMail from '@sendgrid/mail';
+import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 
 class EmailService {
     constructor() {
-        // Configure SendGrid or fallback to development mode
-        this.initializeSendGrid();
+        // Configure Gmail SMTP or fallback to development mode
+        this.initializeGmail();
     }
 
-    initializeSendGrid() {
-        // Check if SendGrid API key is provided
-        if (process.env.SENDGRID_API_KEY) {
-            console.log('📧 Configuring SendGrid for email sending...');
-            sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-            this.emailService = 'sendgrid';
+    initializeGmail() {
+        // Check if Gmail credentials are provided
+        if (process.env.GMAIL_EMAIL && process.env.GMAIL_APP_PASSWORD) {
+            console.log('📧 Configuring Gmail SMTP for email sending...');
+            this.transporter = nodemailer.createTransport({
+                service: 'gmail',
+                host: 'smtp.gmail.com',
+                port: 587,
+                secure: false, // true for 465, false for other ports
+                auth: {
+                    user: process.env.GMAIL_EMAIL,
+                    pass: process.env.GMAIL_APP_PASSWORD
+                }
+            });
+            this.emailService = 'gmail';
+            this.fromEmail = process.env.GMAIL_EMAIL;
         } 
         // Development mode - log emails to console
         else {
             console.log('📧 Using development mode - emails will be logged to console');
             this.emailService = 'development';
+            this.fromEmail = 'noreply@petcare.com';
         }
     }
 
@@ -27,34 +38,33 @@ class EmailService {
     }
 
     async sendEmailVerification(email, code, userName) {
-        const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@petcare.com';
         const mailOptions = {
-            from: fromEmail,
+            from: `"Pet Care Service" <${this.fromEmail}>`,
             to: email,
             subject: 'Verify Your Email Address - Pet Care Service',
             html: this.getEmailVerificationTemplate(code, userName)
         };
 
         try {
-            // If SendGrid is configured, send real email
-            if (this.emailService === 'sendgrid') {
-                const result = await sgMail.send(mailOptions);
-                console.log('✅ Email verification sent via SendGrid:', result[0].statusCode);
-                return { success: true, messageId: result[0].headers['x-message-id'] || 'sendgrid-success' };
+            // If Gmail is configured, send real email
+            if (this.emailService === 'gmail') {
+                const result = await this.transporter.sendMail(mailOptions);
+                console.log('✅ Email verification sent via Gmail:', result.messageId);
+                return { success: true, messageId: result.messageId };
             } else {
                 // Development mode - log to console
                 console.log('\n📧 Email Verification Code (Development Mode)');
                 console.log('===============================================');
                 console.log(`To: ${email}`);
-                console.log(`From: ${fromEmail}`);
+                console.log(`From: ${this.fromEmail}`);
                 console.log(`Subject: ${mailOptions.subject}`);
                 console.log(`Verification Code: ${code}`);
                 console.log('===============================================\n');
-                return { success: true, messageId: 'dev-mode-email' };
+                return { success: true, messageId: 'dev-mode-verification' };
             }
         } catch (error) {
-            console.error('❌ Email sending failed:', error);
-            return { success: false, error: error.message };
+            console.error('❌ Failed to send email verification:', error);
+            throw new Error(`Failed to send verification email: ${error.message}`);
         }
     }
 
@@ -105,25 +115,24 @@ class EmailService {
     }
 
     async sendWelcomeEmail(email, userName, userRole) {
-        const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@petcare.com';
         const mailOptions = {
-            from: fromEmail,
+            from: `"Pet Care Service" <${this.fromEmail}>`,
             to: email,
             subject: 'Welcome to Pet Care Service! 🐾',
             html: this.getWelcomeEmailTemplate(userName, userRole)
         };
 
         try {
-            // If SendGrid is configured, send real email
-            if (this.emailService === 'sendgrid') {
-                const result = await sgMail.send(mailOptions);
-                console.log('✅ Welcome email sent via SendGrid:', result[0].statusCode);
-                return { success: true, messageId: result[0].headers['x-message-id'] || 'sendgrid-success' };
+            // If Gmail is configured, send real email
+            if (this.emailService === 'gmail') {
+                const result = await this.transporter.sendMail(mailOptions);
+                console.log('✅ Welcome email sent via Gmail:', result.messageId);
+                return { success: true, messageId: result.messageId };
             } else {
                 console.log('\n🎉 Welcome Email (Development Mode)');
                 console.log('===================================');
                 console.log(`To: ${email}`);
-                console.log(`From: ${fromEmail}`);
+                console.log(`From: ${this.fromEmail}`);
                 console.log(`Subject: ${mailOptions.subject}`);
                 console.log(`User: ${userName} (${userRole})`);
                 console.log('===================================\n');
@@ -131,7 +140,7 @@ class EmailService {
             }
         } catch (error) {
             console.error('❌ Welcome email sending failed:', error);
-            return { success: false, error: error.message };
+            throw new Error(`Failed to send welcome email: ${error.message}`);
         }
     }
 
@@ -198,26 +207,25 @@ class EmailService {
     }
 
     async sendPasswordResetVerification(email, code, userName) {
-        const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@petcare.com';
         const mailOptions = {
-            from: fromEmail,
+            from: `"Pet Care Service" <${this.fromEmail}>`,
             to: email,
             subject: 'Password Reset Request - Pet Care Service',
             html: this.getPasswordResetTemplate(code, userName)
         };
 
         try {
-            // If SendGrid is configured, send real email
-            if (this.emailService === 'sendgrid') {
-                const result = await sgMail.send(mailOptions);
-                console.log('✅ Password reset email sent via SendGrid:', result[0].statusCode);
-                return { success: true, messageId: result[0].headers['x-message-id'] || 'sendgrid-success' };
+            // If Gmail is configured, send real email
+            if (this.emailService === 'gmail') {
+                const result = await this.transporter.sendMail(mailOptions);
+                console.log('✅ Password reset email sent via Gmail:', result.messageId);
+                return { success: true, messageId: result.messageId };
             } else {
                 // Development mode - log to console
                 console.log('\n🔐 Password Reset Verification Code (Development Mode)');
                 console.log('=====================================================');
                 console.log(`To: ${email}`);
-                console.log(`From: ${fromEmail}`);
+                console.log(`From: ${this.fromEmail}`);
                 console.log(`Subject: ${mailOptions.subject}`);
                 console.log(`User: ${userName}`);
                 console.log(`Verification Code: ${code}`);
@@ -226,7 +234,7 @@ class EmailService {
             }
         } catch (error) {
             console.error('❌ Password reset email sending failed:', error);
-            return { success: false, error: error.message };
+            throw new Error(`Failed to send password reset email: ${error.message}`);
         }
     }
 
@@ -313,20 +321,21 @@ class EmailService {
     }
 
     /**
-     * Test SendGrid connection (useful for debugging)
+     * Test Gmail connection (useful for debugging)
      */
     async testConnection() {
         try {
-            if (this.emailService === 'sendgrid') {
-                // SendGrid doesn't have a direct connection test, so we'll just verify API key is set
-                console.log('✅ SendGrid API key is configured');
-                return { success: true, message: 'SendGrid API key configured successfully' };
+            if (this.emailService === 'gmail') {
+                // Test Gmail connection by verifying the transporter
+                await this.transporter.verify();
+                console.log('✅ Gmail SMTP connection verified successfully');
+                return { success: true, message: 'Gmail SMTP connection verified successfully' };
             } else {
                 console.log('📧 Development mode - no real email connection to test');
                 return { success: true, message: 'Development mode - console logging enabled' };
             }
         } catch (error) {
-            console.error('❌ SendGrid connection test failed:', error);
+            console.error('❌ Gmail connection test failed:', error);
             return { success: false, error: error.message };
         }
     }

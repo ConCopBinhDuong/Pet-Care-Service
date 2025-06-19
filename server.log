@@ -1,0 +1,24 @@
+(node:5991) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✅ Token blacklist service initialized (table exists in database)
+📧 Configuring Gmail SMTP for email sending...
+🚀 Starting Pet Care Service Server (development)
+🔐 Loading self-signed SSL certificates (temporary configuration)
+HTTPS Server running on port: 8443 (self-signed certificates)
+Secure API: https://localhost:8443/api
+Health check: https://localhost:8443/health
+Browser warning expected with self-signed certificates
+Access via: https://localhost:8443
+HTTPS-only mode: No HTTP server running
+🔔 Starting notification scheduler...
+Starting notification scheduler with 300s intervals
+[2025-06-18T05:22:19.839Z] Running notification checks...
+Notification scheduler started successfully
+
+💡 Development Tips:
+   • Accept browser security warning for self-signed certs
+   • Use "Advanced" → "Proceed to localhost" in browsers
+   • Add certificate exception for testing
+📝 Verification code stored for email: thanhnhan1662004+newtest@gmail.com
+   Code: 188269 (expires in 1 minute)
+✅ Email verification sent via Gmail: <99b7a8a7-bf64-f663-6a1d-a70367f0a2a1@student.vgu.edu.vn>
