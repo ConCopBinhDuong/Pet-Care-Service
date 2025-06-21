@@ -156,6 +156,16 @@ router.post('/', validateBookingCreation, (req, res) => {
 
         const { serviceid, slot, servedate, payment_method, petIds } = req.body;
 
+        // Validate required parameters
+        if (
+            !serviceid || !slot || !servedate || !payment_method ||
+            !Array.isArray(petIds) || petIds.length === 0
+        ) {
+            return res.status(400).json({
+                message: 'Missing required booking parameters'
+            });
+        }
+
         // Verify the service exists
         const getServiceStmt = db.prepare(`
             SELECT serviceid, name, price FROM service WHERE serviceid = ?
@@ -207,30 +217,31 @@ router.post('/', validateBookingCreation, (req, res) => {
             }
         }
 
-        // Start transaction
-        const transaction = db.transaction(() => {
+        let bookingId;
+        try {
+            db.exec("BEGIN TRANSACTION");
+
             // Create the booking
             const createBookingStmt = db.prepare(`
                 INSERT INTO booking (poid, svid, slot, servedate, payment_method, status)
                 VALUES (?, ?, ?, ?, ?, 'pending')
             `);
-            
             const bookingResult = createBookingStmt.run(userId, serviceid, slot, servedate, payment_method);
-            const bookingId = bookingResult.lastInsertRowid;
+            bookingId = bookingResult.lastInsertRowid;
 
             // Link pets to the booking
             const linkPetStmt = db.prepare(`
                 INSERT INTO booking_pet (bookid, petid) VALUES (?, ?)
             `);
-            
             for (let petId of petIds) {
                 linkPetStmt.run(bookingId, petId);
             }
 
-            return bookingId;
-        });
-
-        const bookingId = transaction();
+            db.exec("COMMIT");
+        } catch (err) {
+            db.exec("ROLLBACK");
+            throw err;
+        }
 
         // Send notification to service provider about new booking request
         try {
@@ -280,6 +291,7 @@ router.post('/', validateBookingCreation, (req, res) => {
         });
     }
 });
+
 
 // Update booking status or details
 router.put('/:bookingId', validateBookingUpdate, (req, res) => {
