@@ -293,7 +293,7 @@ export const validateProfileUpdate = (req, res, next) => {
  * Validate activity creation data
  */
 export const validateActivityCreation = (req, res, next) => {
-    const { pet_id, activity_type, duration, calories_burned, notes } = req.body;
+    const { pet_id, name, notes: description } = req.body;
     const errors = [];
 
     if (!pet_id) {
@@ -302,25 +302,11 @@ export const validateActivityCreation = (req, res, next) => {
         errors.push('Pet ID must be a positive number');
     }
 
-    if (!activity_type) {
-        errors.push('Activity type is required');
-    } else if (typeof activity_type !== 'string' || activity_type.trim().length === 0) {
-        errors.push('Activity type must be a non-empty string');
+    if (!name) {
+        errors.push('Activity name is required');
     }
 
-    if (duration !== undefined) {
-        if (typeof duration !== 'number' || duration < 0) {
-            errors.push('Duration must be a non-negative number');
-        }
-    }
-
-    if (calories_burned !== undefined) {
-        if (typeof calories_burned !== 'number' || calories_burned < 0) {
-            errors.push('Calories burned must be a non-negative number');
-        }
-    }
-
-    if (notes !== undefined && typeof notes !== 'string') {
+    if (description !== undefined && typeof description !== 'string') {
         errors.push('Notes must be a string');
     }
 
