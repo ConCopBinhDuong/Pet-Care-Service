@@ -146,7 +146,7 @@ router.post('/', authMiddleware, validateServiceSubmission, (req, res) => {
                     s.typeid,
                     st.type as service_type,
                     s.providerid,
-                    sp.bussiness_name as provider_name
+                    sp.business_name as provider_name
                 FROM service s
                 JOIN servicetype st ON s.typeid = st.typeid
                 JOIN serviceprovider sp ON s.providerid = sp.id
@@ -210,7 +210,7 @@ router.get('/', (req, res) => {
                 s.typeid,
                 st.type as service_type,
                 s.providerid,
-                sp.bussiness_name as provider_name
+                sp.business_name as provider_name
             FROM service s
             JOIN servicetype st ON s.typeid = st.typeid
             JOIN serviceprovider sp ON s.providerid = sp.id
@@ -249,7 +249,7 @@ router.get('/', (req, res) => {
         
         // Handle provider name search (case-insensitive partial match)
         if (provider && provider.trim()) {
-            conditions.push('LOWER(sp.bussiness_name) LIKE LOWER(?)');
+            conditions.push('LOWER(sp.business_name) LIKE LOWER(?)');
             params.push(`%${provider.trim()}%`);
         }
         
@@ -310,7 +310,7 @@ router.get('/search', (req, res) => {
                 s.typeid,
                 st.type as service_type,
                 s.providerid,
-                sp.bussiness_name as provider_name
+                sp.business_name as provider_name
             FROM service s
             JOIN servicetype st ON s.typeid = st.typeid
             JOIN serviceprovider sp ON s.providerid = sp.id
@@ -327,7 +327,7 @@ router.get('/search', (req, res) => {
                 LOWER(s.name) LIKE LOWER(?) OR 
                 LOWER(s.description) LIKE LOWER(?) OR 
                 LOWER(st.type) LIKE LOWER(?) OR
-                LOWER(sp.bussiness_name) LIKE LOWER(?)
+                LOWER(sp.business_name) LIKE LOWER(?)
             )`);
             const searchPattern = `%${searchTerm}%`;
             params.push(searchPattern, searchPattern, searchPattern, searchPattern);
@@ -351,7 +351,7 @@ router.get('/search', (req, res) => {
         
         // Provider name search
         if (provider && provider.trim()) {
-            conditions.push('LOWER(sp.bussiness_name) LIKE LOWER(?)');
+            conditions.push('LOWER(sp.business_name) LIKE LOWER(?)');
             params.push(`%${provider.trim()}%`);
         }
         
@@ -632,7 +632,7 @@ router.get('/pending-review', authMiddleware, (req, res) => {
                 s.status,
                 s.submission_date,
                 st.type as service_type,
-                sp.bussiness_name as provider_name,
+                sp.business_name as provider_name,
                 u.name as provider_contact_name,
                 u.email as provider_email
             FROM service s
@@ -703,7 +703,7 @@ router.get('/review-summary', authMiddleware, (req, res) => {
                 s.status,
                 s.review_date,
                 s.rejection_reason,
-                sp.bussiness_name as provider_name,
+                sp.business_name as provider_name,
                 u.name as reviewer_name
             FROM service s
             JOIN serviceprovider sp ON s.providerid = sp.id
@@ -719,14 +719,14 @@ router.get('/review-summary', authMiddleware, (req, res) => {
         // Get provider breakdown
         const getProviderBreakdownStmt = db.prepare(`
             SELECT 
-                sp.bussiness_name as provider_name,
+                sp.business_name as provider_name,
                 COUNT(*) as total_services,
                 SUM(CASE WHEN s.status = 'pending' THEN 1 ELSE 0 END) as pending,
                 SUM(CASE WHEN s.status = 'approved' THEN 1 ELSE 0 END) as approved,
                 SUM(CASE WHEN s.status = 'rejected' THEN 1 ELSE 0 END) as rejected
             FROM service s
             JOIN serviceprovider sp ON s.providerid = sp.id
-            GROUP BY s.providerid, sp.bussiness_name
+            GROUP BY s.providerid, sp.business_name
             ORDER BY total_services DESC
         `);
 
@@ -765,7 +765,7 @@ router.get('/:serviceid', (req, res) => {
                 s.typeid,
                 st.type as service_type,
                 s.providerid,
-                sp.bussiness_name as provider_name
+                sp.business_name as provider_name
             FROM service s
             JOIN servicetype st ON s.typeid = st.typeid
             JOIN serviceprovider sp ON s.providerid = sp.id
@@ -1156,9 +1156,10 @@ router.post('/:id/review', authMiddleware, validateServiceApproval, (req, res) =
                 s.serviceid, 
                 s.status, 
                 s.name,
-                sp.bussiness_name as provider_name,
+                sp.business_name as provider_name,
                 u.name as provider_contact_name,
-                u.email as provider_email
+                u.email as provider_email,
+                s.providerid as providerid
             FROM service s
             JOIN serviceprovider sp ON s.providerid = sp.id
             JOIN users u ON sp.id = u.userid
@@ -1242,7 +1243,7 @@ router.post('/:id/review', authMiddleware, validateServiceApproval, (req, res) =
                 s.review_date,
                 s.rejection_reason,
                 st.type as service_type,
-                sp.bussiness_name as provider_name,
+                sp.business_name as provider_name,
                 u.name as reviewer_name
             FROM service s
             JOIN servicetype st ON s.typeid = st.typeid
