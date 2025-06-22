@@ -1,0 +1,245 @@
+{
+  "info": {
+    "name": "Pet Care Service - Reviews Tests",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Create Review for Booking",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const reviewData = {",
+              "  stars: 5,",
+              "  comment: \"Excellent service, very satisfied!\"",
+              "};",
+              "pm.variables.set('reviewData', JSON.stringify(reviewData));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 201\", function () {",
+              "  pm.response.to.have.status(201);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Review created successfully\", function () {",
+              "  pm.expect(jsonData.message).to.include('Review created successfully');",
+              "  pm.expect(jsonData.review).to.have.property('bookingId');",
+              "  pm.environment.set('testBookingId', jsonData.review.bookingId);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/reviews/booking/{{bookingId}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{{reviewData}}"
+        }
+      }
+    },
+    {
+      "name": "Get My Reviews (Pet Owner)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Reviews array exists\", function () {",
+              "  pm.expect(jsonData.reviews).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/reviews/my-reviews"
+      }
+    },
+    {
+      "name": "Get Review by Booking ID",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Review details correct\", function () {",
+              "  pm.expect(jsonData.review).to.have.property('bookingId');",
+              "  pm.expect(jsonData.review.bookingId).to.eql(parseInt(pm.environment.get('testBookingId')));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/reviews/booking/{{testBookingId}}"
+      }
+    },
+    {
+      "name": "Update Review",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const updateData = {",
+              "  stars: 4,",
+              "  comment: \"Good service, but room for improvement.\"",
+              "};",
+              "pm.variables.set('updateReviewData', JSON.stringify(updateData));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Review updated successfully\", function () {",
+              "  pm.expect(jsonData.message).to.include('Review updated successfully');",
+              "  pm.expect(jsonData.review.stars).to.eql(4);",
+              "  pm.expect(jsonData.review.comment).to.include('room for improvement');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/reviews/booking/{{testBookingId}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{{updateReviewData}}"
+        }
+      }
+    },
+    {
+      "name": "Delete Review",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Review deleted successfully\", function () {",
+              "  pm.expect(jsonData.message).to.include('Review deleted successfully');",
+              "  pm.expect(jsonData.deletedReview.bookingId).to.eql(parseInt(pm.environment.get('testBookingId')));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/reviews/booking/{{testBookingId}}"
+      }
+    },
+    {
+      "name": "Get Reviews for Service (Service Provider)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Service reviews array exists\", function () {",
+              "  pm.expect(jsonData.reviews).to.be.an('array');",
+              "  pm.expect(jsonData.service).to.have.property('id');",
+              "  pm.expect(jsonData.statistics).to.have.property('totalReviews');",
+              "  pm.expect(jsonData.statistics).to.have.property('averageRating');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{serviceProviderToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/reviews/service/{{serviceId}}"
+      }
+    },
+    {
+      "name": "Get Reviews for Provider (Service Provider)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Provider reviews array exists\", function () {",
+              "  pm.expect(jsonData.reviews).to.be.an('array');",
+              "  pm.expect(jsonData.provider).to.have.property('id');",
+              "  pm.expect(jsonData.statistics).to.have.property('totalReviews');",
+              "  pm.expect(jsonData.statistics).to.have.property('averageRating');",
+              "  pm.expect(jsonData.statistics).to.have.property('serviceBreakdown');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{serviceProviderToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/reviews/provider/{{providerId}}"
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "https://localhost:8443", "type": "string" },
+    { "key": "petOwnerToken", "value": "", "type": "string" },
+    { "key": "serviceProviderToken", "value": "", "type": "string" },
+    { "key": "bookingId", "value": "1", "type": "string" },
+    { "key": "serviceId", "value": "1", "type": "string" },
+    { "key": "providerId", "value": "1", "type": "string" }
+  ]
+}

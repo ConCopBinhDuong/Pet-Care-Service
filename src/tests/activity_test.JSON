@@ -1,0 +1,256 @@
+{
+  "info": {
+    "name": "Pet Care Service - Activity Tests",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Get All Activities",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{petOwnerToken}}"
+          }
+        ],
+        "url": "https://localhost:8443/api/activity"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Response structure is correct\", function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('message');",
+              "    pm.expect(jsonData).to.have.property('activities').to.be.an('array');",
+              "});",
+              "",
+              "pm.test(\"Activities have required fields\", function () {",
+              "    const jsonData = pm.response.json();",
+              "    if (jsonData.activities.length > 0) {",
+              "        pm.expect(jsonData.activities[0]).to.have.all.keys('activityid', 'name', 'description', 'petid', 'pet_name');",
+              "    }",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get Pet Activities",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{petOwnerToken}}"
+          }
+        ],
+        "url": "https://localhost:8443/api/activity/pet/{{petId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Response has correct structure\", function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('message');",
+              "    pm.expect(jsonData).to.have.property('pet');",
+              "    pm.expect(jsonData).to.have.property('activities').to.be.an('array');",
+              "    pm.expect(jsonData.pet).to.have.property('id');",
+              "    pm.expect(jsonData.pet).to.have.property('name');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Add New Activity",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{petOwnerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "https://localhost:8443/api/activity/pet/{{petId}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"name\": \"Morning Walk\",\n    \"description\": \"30 minute walk in the park\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 201\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test(\"Activity created successfully\", function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.message).to.eql('Activity added successfully');",
+              "    pm.expect(jsonData.activity).to.have.property('activityid');",
+              "    pm.expect(jsonData.activity.name).to.eql('Morning Walk');",
+              "    pm.globals.set('activityId', jsonData.activity.activityid);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get Specific Activity",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{petOwnerToken}}"
+          }
+        ],
+        "url": "https://localhost:8443/api/activity/{{activityId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Activity details are correct\", function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.activity).to.have.property('activityid');",
+              "    pm.expect(jsonData.activity).to.have.property('name');",
+              "    pm.expect(jsonData.activity).to.have.property('description');",
+              "    pm.expect(jsonData.activity).to.have.property('pet_name');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Update Activity",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{petOwnerToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "https://localhost:8443/api/activity/{{activityId}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"name\": \"Evening Walk\",\n    \"description\": \"45 minute walk in the evening\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Activity updated successfully\", function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.message).to.eql('Activity updated successfully');",
+              "    pm.expect(jsonData.activity.name).to.eql('Evening Walk');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Delete Activity",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{petOwnerToken}}"
+          }
+        ],
+        "url": "https://localhost:8443/api/activity/{{activityId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Activity deleted successfully\", function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.message).to.eql('Activity deleted successfully');",
+              "    pm.expect(jsonData.deletedActivity).to.have.property('id');",
+              "    pm.expect(jsonData.deletedActivity).to.have.property('name');",
+              "    pm.expect(jsonData.deletedActivity).to.have.property('pet_name');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Unauthorized Access Test",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{serviceProviderToken}}"
+          }
+        ],
+        "url": "https://localhost:8443/api/activity"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 403\", function () {",
+              "    pm.response.to.have.status(403);",
+              "});",
+              "",
+              "pm.test(\"Access denied message is correct\", function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.message).to.include('Access denied');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

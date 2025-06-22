@@ -52,7 +52,7 @@ export const validatePassword = (password) => {
  * Registration validation middleware
  */
 export const validateRegistration = (req, res, next) => {
-    const { username, email, password, gender, role, phone, bussiness_name } = req.body;
+    const { username, email, password, gender, role, phone, business_name } = req.body;
     const errors = [];
 
     // Required fields
@@ -82,7 +82,7 @@ export const validateRegistration = (req, res, next) => {
 
     // Role-specific validation
     if (role === 'Service provider') {
-        if (!bussiness_name || bussiness_name.trim().length < 2) {
+        if (!business_name || business_name.trim().length < 2) {
             errors.push('Business name is required for service providers');
         }
     }
@@ -108,7 +108,7 @@ export const validateRegistration = (req, res, next) => {
  * Validates registration data before starting verification process
  */
 export const validatePreVerificationRegistration = (req, res, next) => {
-    const { username, email, password, gender, role, phone, bussiness_name } = req.body;
+    const { username, email, password, gender, role, phone, business_name } = req.body;
     const errors = [];
 
     // Required fields
@@ -138,7 +138,7 @@ export const validatePreVerificationRegistration = (req, res, next) => {
 
     // Role-specific validation
     if (role === 'Service provider') {
-        if (!bussiness_name || bussiness_name.trim().length < 2) {
+        if (!business_name || business_name.trim().length < 2) {
             errors.push('Business name is required for service providers');
         }
     }
@@ -293,7 +293,7 @@ export const validateProfileUpdate = (req, res, next) => {
  * Validate activity creation data
  */
 export const validateActivityCreation = (req, res, next) => {
-    const { pet_id, activity_type, duration, calories_burned, notes } = req.body;
+    const { pet_id, name, notes: description } = req.body;
     const errors = [];
 
     if (!pet_id) {
@@ -302,25 +302,11 @@ export const validateActivityCreation = (req, res, next) => {
         errors.push('Pet ID must be a positive number');
     }
 
-    if (!activity_type) {
-        errors.push('Activity type is required');
-    } else if (typeof activity_type !== 'string' || activity_type.trim().length === 0) {
-        errors.push('Activity type must be a non-empty string');
+    if (!name) {
+        errors.push('Activity name is required');
     }
 
-    if (duration !== undefined) {
-        if (typeof duration !== 'number' || duration < 0) {
-            errors.push('Duration must be a non-negative number');
-        }
-    }
-
-    if (calories_burned !== undefined) {
-        if (typeof calories_burned !== 'number' || calories_burned < 0) {
-            errors.push('Calories burned must be a non-negative number');
-        }
-    }
-
-    if (notes !== undefined && typeof notes !== 'string') {
+    if (description !== undefined && typeof description !== 'string') {
         errors.push('Notes must be a string');
     }
 
@@ -369,6 +355,53 @@ export const validateActivityUpdate = (req, res, next) => {
             success: false,
             error: 'Validation failed',
             details: errors
+        });
+    }
+
+    next();
+};
+
+/**
+ * Validate service creation data
+ */
+
+export const validateServiceCreation = (req, res, next) => {
+    const { name, price, duration, typeid, timeSlots } = req.body;
+    const errors = [];
+
+    if (!name || name.trim().length < 3) {
+        errors.push('Service name must be at least 3 characters long');
+    }
+
+    if (!price || isNaN(price) || price <= 0) {
+        errors.push('Service price must be a positive number');
+    }
+
+    if (!duration || !duration.match(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)) {
+        errors.push('Duration must be in HH:MM format');
+    }
+
+    if (!typeid || !Number.isInteger(Number(typeid))) {
+        errors.push('Valid service type ID is required');
+    }
+
+    if (!Array.isArray(timeSlots) || timeSlots.length === 0) {
+        errors.push('At least one time slot is required');
+    } else {
+        // Validate each time slot format (HH:MM)
+        const timeFormat = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+        for (const slot of timeSlots) {
+            if (!timeFormat.test(slot)) {
+                errors.push('Time slots must be in HH:MM format');
+                break;
+            }
+        }
+    }
+
+    if (errors.length > 0) {
+        return res.status(400).json({
+            success: false,
+            errors: errors
         });
     }
 

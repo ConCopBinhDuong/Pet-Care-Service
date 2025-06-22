@@ -6,6 +6,59 @@ import notificationService from '../services/notificationService.js';
 
 const router = express.Router();
 
+//initialize service types (Manager only)
+router.post('/initialize', authMiddleware, async (req, res) => {
+    try {
+        const userRole = req.user.role;
+        
+        // Only manager can initialize service types
+        if (userRole !== 'Manager') {
+            return res.status(403).json({
+                message: 'Access denied. Manager only.'
+            });
+        }
+
+        const { serviceTypes } = req.body;
+
+        if (!Array.isArray(serviceTypes)) {
+            return res.status(400).json({
+                message: 'Invalid service types format'
+            });
+        }
+
+        // Start transaction using better-sqlite3 syntax
+        const transaction = db.prepare(`
+            INSERT OR REPLACE INTO servicetype (type) VALUES (?)
+        `);
+
+        try {
+            db.prepare('BEGIN').run();
+            
+            // Execute inserts within transaction
+            serviceTypes.forEach(serviceType => {
+                transaction.run(serviceType.type);
+            });
+            
+            db.prepare('COMMIT').run();
+
+            res.status(200).json({
+                message: 'Service types initialized',
+                types: serviceTypes
+            });
+
+        } catch (error) {
+            db.prepare('ROLLBACK').run();
+            throw error;
+        }
+
+    } catch (error) {
+        console.error('Error initializing service types:', error);
+        res.status(500).json({ 
+            message: 'Internal server error while initializing service types' 
+        });
+    }
+});
+
 // Get all service types
 router.get('/types', (req, res) => {
     try {
@@ -25,6 +78,112 @@ router.get('/types', (req, res) => {
         console.error('Error retrieving service types:', error);
         res.status(500).json({ 
             message: 'Internal server error while retrieving service types' 
+        });
+    }
+});
+
+// Add a new service (Service Provider only)
+router.post('/', authMiddleware, validateServiceSubmission, (req, res) => {
+    try {
+        const userId = req.user.userid;
+        const userRole = req.user.role;
+
+        // Only service providers can add services
+        if (userRole !== 'Service provider') {
+            return res.status(403).json({
+                message: 'Access denied. Only service providers can add services.'
+            });
+        }
+
+        const { 
+            name, 
+            price, 
+            description, 
+            duration, 
+            typeid, 
+            timeSlots 
+        } = req.body;
+
+        // Start transaction
+        db.exec('BEGIN TRANSACTION');
+
+        try {
+            // Insert service
+            const insertServiceStmt = db.prepare(`
+                INSERT INTO service (name, price, description, duration, typeid, providerid)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `);
+
+            const result = insertServiceStmt.run(
+                name,
+                price,
+                description || null,
+                duration,
+                typeid,
+                userId
+            );
+
+            const serviceId = result.lastInsertRowid;
+
+            // Add time slots
+            const insertTimeSlotStmt = db.prepare(`
+                INSERT INTO timeslot (serviceid, slot)
+                VALUES (?, ?)
+            `);
+
+            for (const slot of timeSlots) {
+                insertTimeSlotStmt.run(serviceId, slot);
+            }
+
+            // Get the newly created service
+            const getServiceStmt = db.prepare(`
+                SELECT 
+                    s.serviceid,
+                    s.name,
+                    s.price,
+                    s.description,
+                    s.duration,
+                    s.typeid,
+                    st.type as service_type,
+                    s.providerid,
+                    sp.business_name as provider_name
+                FROM service s
+                JOIN servicetype st ON s.typeid = st.typeid
+                JOIN serviceprovider sp ON s.providerid = sp.id
+                WHERE s.serviceid = ?
+            `);
+
+            const newService = getServiceStmt.get(serviceId);
+
+            // Get the time slots
+            const getTimeSlotsStmt = db.prepare(`
+                SELECT slot
+                FROM timeslot
+                WHERE serviceid = ?
+                ORDER BY slot ASC
+            `);
+
+            const serviceTimeSlots = getTimeSlotsStmt.all(serviceId);
+
+            db.exec('COMMIT');
+
+            res.status(201).json({
+                message: 'Service created successfully',
+                service: {
+                    ...newService,
+                    timeSlots: serviceTimeSlots.map(ts => ts.slot)
+                }
+            });
+
+        } catch (err) {
+            db.exec('ROLLBACK');
+            throw err;
+        }
+
+    } catch (error) {
+        console.error('Error creating service:', error);
+        res.status(500).json({
+            message: 'Internal server error while creating service'
         });
     }
 });
@@ -51,7 +210,7 @@ router.get('/', (req, res) => {
                 s.typeid,
                 st.type as service_type,
                 s.providerid,
-                sp.bussiness_name as provider_name
+                sp.business_name as provider_name
             FROM service s
             JOIN servicetype st ON s.typeid = st.typeid
             JOIN serviceprovider sp ON s.providerid = sp.id
@@ -90,7 +249,7 @@ router.get('/', (req, res) => {
         
         // Handle provider name search (case-insensitive partial match)
         if (provider && provider.trim()) {
-            conditions.push('LOWER(sp.bussiness_name) LIKE LOWER(?)');
+            conditions.push('LOWER(sp.business_name) LIKE LOWER(?)');
             params.push(`%${provider.trim()}%`);
         }
         
@@ -151,7 +310,7 @@ router.get('/search', (req, res) => {
                 s.typeid,
                 st.type as service_type,
                 s.providerid,
-                sp.bussiness_name as provider_name
+                sp.business_name as provider_name
             FROM service s
             JOIN servicetype st ON s.typeid = st.typeid
             JOIN serviceprovider sp ON s.providerid = sp.id
@@ -168,7 +327,7 @@ router.get('/search', (req, res) => {
                 LOWER(s.name) LIKE LOWER(?) OR 
                 LOWER(s.description) LIKE LOWER(?) OR 
                 LOWER(st.type) LIKE LOWER(?) OR
-                LOWER(sp.bussiness_name) LIKE LOWER(?)
+                LOWER(sp.business_name) LIKE LOWER(?)
             )`);
             const searchPattern = `%${searchTerm}%`;
             params.push(searchPattern, searchPattern, searchPattern, searchPattern);
@@ -192,7 +351,7 @@ router.get('/search', (req, res) => {
         
         // Provider name search
         if (provider && provider.trim()) {
-            conditions.push('LOWER(sp.bussiness_name) LIKE LOWER(?)');
+            conditions.push('LOWER(sp.business_name) LIKE LOWER(?)');
             params.push(`%${provider.trim()}%`);
         }
         
@@ -473,7 +632,7 @@ router.get('/pending-review', authMiddleware, (req, res) => {
                 s.status,
                 s.submission_date,
                 st.type as service_type,
-                sp.bussiness_name as provider_name,
+                sp.business_name as provider_name,
                 u.name as provider_contact_name,
                 u.email as provider_email
             FROM service s
@@ -544,7 +703,7 @@ router.get('/review-summary', authMiddleware, (req, res) => {
                 s.status,
                 s.review_date,
                 s.rejection_reason,
-                sp.bussiness_name as provider_name,
+                sp.business_name as provider_name,
                 u.name as reviewer_name
             FROM service s
             JOIN serviceprovider sp ON s.providerid = sp.id
@@ -560,14 +719,14 @@ router.get('/review-summary', authMiddleware, (req, res) => {
         // Get provider breakdown
         const getProviderBreakdownStmt = db.prepare(`
             SELECT 
-                sp.bussiness_name as provider_name,
+                sp.business_name as provider_name,
                 COUNT(*) as total_services,
                 SUM(CASE WHEN s.status = 'pending' THEN 1 ELSE 0 END) as pending,
                 SUM(CASE WHEN s.status = 'approved' THEN 1 ELSE 0 END) as approved,
                 SUM(CASE WHEN s.status = 'rejected' THEN 1 ELSE 0 END) as rejected
             FROM service s
             JOIN serviceprovider sp ON s.providerid = sp.id
-            GROUP BY s.providerid, sp.bussiness_name
+            GROUP BY s.providerid, sp.business_name
             ORDER BY total_services DESC
         `);
 
@@ -606,7 +765,7 @@ router.get('/:serviceid', (req, res) => {
                 s.typeid,
                 st.type as service_type,
                 s.providerid,
-                sp.bussiness_name as provider_name
+                sp.business_name as provider_name
             FROM service s
             JOIN servicetype st ON s.typeid = st.typeid
             JOIN serviceprovider sp ON s.providerid = sp.id
@@ -997,9 +1156,10 @@ router.post('/:id/review', authMiddleware, validateServiceApproval, (req, res) =
                 s.serviceid, 
                 s.status, 
                 s.name,
-                sp.bussiness_name as provider_name,
+                sp.business_name as provider_name,
                 u.name as provider_contact_name,
-                u.email as provider_email
+                u.email as provider_email,
+                s.providerid as providerid
             FROM service s
             JOIN serviceprovider sp ON s.providerid = sp.id
             JOIN users u ON sp.id = u.userid
@@ -1083,7 +1243,7 @@ router.post('/:id/review', authMiddleware, validateServiceApproval, (req, res) =
                 s.review_date,
                 s.rejection_reason,
                 st.type as service_type,
-                sp.bussiness_name as provider_name,
+                sp.business_name as provider_name,
                 u.name as reviewer_name
             FROM service s
             JOIN servicetype st ON s.typeid = st.typeid

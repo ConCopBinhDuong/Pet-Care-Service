@@ -1,0 +1,533 @@
+{
+  "info": {
+    "name": "Pet Care Service - Services Tests",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Service Types Management",
+      "item": [
+        {
+          "name": "Initialize Service Types",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/services/initialize",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"serviceTypes\": {{serviceTypes}} }"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const serviceTypes = [",
+                  "    { type: 'Dog Walking', basePrice: 30 },",
+                  "    { type: 'Pet Grooming', basePrice: 50 },",
+                  "    { type: 'Veterinary Care', basePrice: 80 },",
+                  "    { type: 'Pet Sitting', basePrice: 40 },",
+                  "    { type: 'Pet Training', basePrice: 60 },",
+                  "    { type: 'Pet Boarding', basePrice: 45 }",
+                  "];",
+                  "",
+                  "pm.environment.set('serviceTypes', JSON.stringify(serviceTypes));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Service types initialized successfully\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.message).to.eql('Service types initialized');",
+                  "    pm.expect(jsonData.types).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get All Service Types",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/services/types"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Service types retrieved successfully\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.serviceTypes).to.be.an('array');",
+                  "    if (jsonData.serviceTypes.length > 0) {",
+                  "        pm.expect(jsonData.serviceTypes[0]).to.have.all.keys('typeid', 'type');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Service Provider Operations",
+      "item": [
+        {
+          "name": "Submit New Service",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Example service data for testing",
+              "const exampleService = {",
+              "    name: \"Professional Dog Walking Service\",",
+              "    price: 30.00,",
+              "    description: \"Expert dog walking service with experienced handlers\",",
+              "    duration: \"60\",",
+              "    typeid: 1,",
+              "    timeSlots: [\"09:00\", \"14:00\", \"16:00\"]",
+              "};",
+              "",
+              "pm.environment.set('exampleService', JSON.stringify(exampleService));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 201\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test(\"Service submitted successfully\", function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.message).to.include('submitted successfully');",
+              "    pm.expect(jsonData.service).to.have.property('serviceid');",
+              "    pm.environment.set('newServiceId', jsonData.service.serviceid);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{serviceProviderToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/services/submit",
+        "body": {
+          "mode": "raw",
+          "raw": "{{exampleService}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+        },
+        {
+          "name": "Get My Services",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{serviceProviderToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/services/my-services"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Services retrieved with statistics\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('services');",
+                  "    pm.expect(jsonData).to.have.property('statistics');",
+                  "    pm.expect(jsonData.statistics).to.have.all.keys('total', 'pending', 'approved', 'rejected');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Pending Service",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{serviceProviderToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/services/{{newServiceId}}/update",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Updated Dog Walking Service\",\n    \"price\": 35.00,\n    \"description\": \"Updated professional service\",\n    \"duration\": \"60\",\n    \"typeid\": 1,\n    \"timeSlots\": [\"10:00\", \"15:00\", \"17:00\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Service updated successfully\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.message).to.eql('Service updated successfully');",
+                  "    pm.expect(jsonData.service.name).to.include('Updated');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Manager Operations",
+      "item": [
+        {
+          "name": "Get Pending Reviews",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/services/pending-review"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Pending services retrieved successfully\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('services');",
+                  "    pm.expect(jsonData).to.have.property('count');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Review Service - Approve",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/services/{{newServiceId}}/review",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"action\": \"approve\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Service approved successfully\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.message).to.include('approved successfully');",
+                  "    pm.expect(jsonData.service.status).to.eql('approved');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Review Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/services/review-summary"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Review summary structure is correct\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.summary).to.have.all.keys('statistics', 'recentReviews', 'providerBreakdown');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Public Service Operations",
+      "item": [
+        {
+          "name": "Get All Services",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/services"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Services retrieved successfully\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('services').to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search Services",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/services/search?q=dog&minPrice=20&maxPrice=50&sortBy=price&sortOrder=asc",
+              "query": [
+                {
+                  "key": "q",
+                  "value": "dog"
+                },
+                {
+                  "key": "minPrice",
+                  "value": "20"
+                },
+                {
+                  "key": "maxPrice",
+                  "value": "50"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "price"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "asc"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Search results are filtered correctly\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('services');",
+                  "    pm.expect(jsonData).to.have.property('searchQuery');",
+                  "    pm.expect(jsonData.searchQuery).to.have.property('priceRange');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Service Details",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/services/{{newServiceId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Service details are complete\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.service).to.include.all.keys(",
+                  "        'serviceid',",
+                  "        'name',",
+                  "        'price',",
+                  "        'description',",
+                  "        'duration',",
+                  "        'service_type',",
+                  "        'provider_name',",
+                  "        'timeSlots'",
+                  "    );",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Error Cases",
+      "item": [
+        {
+          "name": "Submit Service - Unauthorized",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/services/submit",
+            "body": {
+              "mode": "raw",
+              "raw": "{{exampleService}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 401\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Review Service - Invalid Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{serviceProviderToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/services/{{newServiceId}}/review",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"action\": \"approve\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "",
+                  "pm.test(\"Access denied message\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.message).to.include('Access denied');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://localhost:8443",
+      "type": "string"
+    }
+  ]
+}

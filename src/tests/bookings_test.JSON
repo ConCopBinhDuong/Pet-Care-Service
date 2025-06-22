@@ -1,0 +1,861 @@
+{
+  "info": {
+    "name": "Pet Care Service - Bookings API Tests",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Pet Owner - Create Booking (Success)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const bookingData = {",
+              "  serviceid: parseInt(pm.environment.get('serviceId')),",
+              "  slot: \"09:00\",",
+              "  servedate: \"2025-07-01\",",
+              "  payment_method: \"Credit Card\",",
+              "  petIds: [parseInt(pm.environment.get('petId'))]",
+              "};",
+              "pm.variables.set('bookingData', JSON.stringify(bookingData));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 201\", function () {",
+              "  pm.response.to.have.status(201);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Booking created successfully\", function () {",
+              "  pm.expect(jsonData.booking).to.have.property('bookingId');",
+              "  pm.environment.set('bookingId', jsonData.booking.bookingId);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/bookings",
+        "body": {
+          "mode": "raw",
+          "raw": "{{bookingData}}"
+        }
+      }
+    },
+    {
+      "name": "Pet Owner - Create Booking (Missing Params)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const bookingData = {",
+              "  serviceid: parseInt(pm.environment.get('serviceId'))",
+              "};",
+              "pm.variables.set('bookingData', JSON.stringify(bookingData));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "  pm.response.to.have.status(400);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Missing params message\", function () {",
+              "  pm.expect(jsonData.message).to.include('Missing required booking parameters');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/bookings",
+        "body": {
+          "mode": "raw",
+          "raw": "{{bookingData}}"
+        }
+      }
+    },
+    {
+      "name": "Pet Owner - Create Booking (Service Not Found)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const bookingData = {",
+              "  serviceid: 99999,",
+              "  slot: \"09:00\",",
+              "  servedate: \"2025-07-01\",",
+              "  payment_method: \"Credit Card\",",
+              "  petIds: [parseInt(pm.environment.get('petId'))]",
+              "};",
+              "pm.variables.set('bookingData', JSON.stringify(bookingData));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 404\", function () {",
+              "  pm.response.to.have.status(404);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Service not found message\", function () {",
+              "  pm.expect(jsonData.message).to.include('Service not found');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/bookings",
+        "body": {
+          "mode": "raw",
+          "raw": "{{bookingData}}"
+        }
+      }
+    },
+    {
+      "name": "Pet Owner - Create Booking (Invalid Time Slot)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const bookingData = {",
+              "  serviceid: parseInt(pm.environment.get('serviceId')),",
+              "  slot: \"23:59\",",
+              "  servedate: \"2025-07-01\",",
+              "  payment_method: \"Credit Card\",",
+              "  petIds: [parseInt(pm.environment.get('petId'))]",
+              "};",
+              "pm.variables.set('bookingData', JSON.stringify(bookingData));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "  pm.response.to.have.status(400);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Invalid time slot message\", function () {",
+              "  pm.expect(jsonData.message).to.include('Invalid time slot');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/bookings",
+        "body": {
+          "mode": "raw",
+          "raw": "{{bookingData}}"
+        }
+      }
+    },
+    {
+      "name": "Pet Owner - Create Booking (Slot Already Booked)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Use the same slot and date as a previous successful booking",
+              "const bookingData = {",
+              "  serviceid: parseInt(pm.environment.get('serviceId')),",
+              "  slot: \"09:00\",",
+              "  servedate: \"2025-07-01\",",
+              "  payment_method: \"Credit Card\",",
+              "  petIds: [parseInt(pm.environment.get('petId'))]",
+              "};",
+              "pm.variables.set('bookingData', JSON.stringify(bookingData));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 409\", function () {",
+              "  pm.response.to.have.status(409);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Slot already booked message\", function () {",
+              "  pm.expect(jsonData.message).to.include('already booked');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/bookings",
+        "body": {
+          "mode": "raw",
+          "raw": "{{bookingData}}"
+        }
+      }
+    },
+    {
+      "name": "Pet Owner - Create Booking (Pet Not Owned)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const bookingData = {",
+              "  serviceid: parseInt(pm.environment.get('serviceId')),",
+              "  slot: \"10:00\",",
+              "  servedate: \"2025-07-02\",",
+              "  payment_method: \"Credit Card\",",
+              "  petIds: [99999]",
+              "};",
+              "pm.variables.set('bookingData', JSON.stringify(bookingData));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "  pm.response.to.have.status(400);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Pet not found message\", function () {",
+              "  pm.expect(jsonData.message).to.include('not found or doesn');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/bookings",
+        "body": {
+          "mode": "raw",
+          "raw": "{{bookingData}}"
+        }
+      }
+    },
+    {
+      "name": "Pet Owner - Get All Bookings",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Bookings array exists\", function () {",
+              "  pm.expect(jsonData.bookings).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/bookings"
+      }
+    },
+    {
+      "name": "Pet Owner - Get Booking Details (Success)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Booking details object exists\", function () {",
+              "  pm.expect(jsonData.booking).to.have.property('bookid');",
+              "  pm.expect(jsonData.booking).to.have.property('serviceid');",
+              "  pm.expect(jsonData.booking).to.have.property('pets');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/bookings/{{bookingId}}"
+      }
+    },
+    {
+      "name": "Pet Owner - Get Booking Details (Not Found)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 404\", function () {",
+              "  pm.response.to.have.status(404);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Booking not found message\", function () {",
+              "  pm.expect(jsonData.message).to.include('Booking not found');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/bookings/99999"
+      }
+    },
+    {
+      "name": "Pet Owner - Update Booking (Success)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const updateData = {",
+              "  servedate: \"2025-07-03\",",
+              "  payment_method: \"Cash\",",
+              "  status: \"confirmed\"",
+              "};",
+              "pm.variables.set('updateBookingData', JSON.stringify(updateData));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Booking updated message\", function () {",
+              "  pm.expect(jsonData.message).to.include('Booking updated successfully');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/bookings/{{bookingId}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{{updateBookingData}}"
+        }
+      }
+    },
+    {
+      "name": "Pet Owner - Update Booking (No Fields)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "pm.variables.set('updateBookingData', JSON.stringify({}));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "  pm.response.to.have.status(400);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"No valid fields message\", function () {",
+              "  pm.expect(jsonData.message).to.include('No valid fields to update');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/bookings/{{bookingId}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{{updateBookingData}}"
+        }
+      }
+    },
+    {
+      "name": "Pet Owner - Cancel Booking (Success)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Booking cancelled message\", function () {",
+              "  pm.expect(jsonData.message).to.include('Booking cancelled successfully');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/bookings/{{bookingId}}"
+      }
+    },
+    {
+      "name": "Pet Owner - Cancel Booking (Already Cancelled)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "  pm.response.to.have.status(400);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Already cancelled message\", function () {",
+              "  pm.expect(jsonData.message).to.include('already cancelled');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/bookings/{{bookingId}}"
+      }
+    },
+    {
+      "name": "Pet Owner - Cancel Booking (Completed)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "  pm.response.to.have.status(400);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Cannot cancel completed message\", function () {",
+              "  pm.expect(jsonData.message).to.include('Cannot cancel completed booking');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/bookings/99998"
+      }
+    },
+    {
+      "name": "Pet Owner - Create Booking (Not Pet Owner Role)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const bookingData = {",
+              "  serviceid: parseInt(pm.environment.get('serviceId')),",
+              "  slot: \"09:00\",",
+              "  servedate: \"2025-07-01\",",
+              "  payment_method: \"Credit Card\",",
+              "  petIds: [parseInt(pm.environment.get('petId'))]",
+              "};",
+              "pm.variables.set('bookingData', JSON.stringify(bookingData));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 403\", function () {",
+              "  pm.response.to.have.status(403);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Access denied message\", function () {",
+              "  pm.expect(jsonData.message).to.include('Access denied');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{serviceProviderToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/bookings",
+        "body": {
+          "mode": "raw",
+          "raw": "{{bookingData}}"
+        }
+      }
+    },
+    {
+      "name": "Service Provider - Get Booking Requests (Success)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Booking requests array exists\", function () {",
+              "  pm.expect(jsonData.bookings).to.be.an('array');",
+              "  pm.expect(jsonData.statistics).to.exist;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{serviceProviderToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/bookings/provider/requests"
+      }
+    },
+    {
+      "name": "Service Provider - Get Booking Requests (Not Provider Role)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 403\", function () {",
+              "  pm.response.to.have.status(403);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Access denied message\", function () {",
+              "  pm.expect(jsonData.message).to.include('Access denied');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/bookings/provider/requests"
+      }
+    },
+    {
+      "name": "Service Provider - Accept Booking (Success)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Booking request accepted\", function () {",
+              "  pm.expect(jsonData.message).to.include('accepted successfully');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{serviceProviderToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/bookings/provider/requests/{{bookingId}}/accept"
+      }
+    },
+    {
+      "name": "Service Provider - Accept Booking (Already Confirmed)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "  pm.response.to.have.status(400);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Cannot accept booking message\", function () {",
+              "  pm.expect(jsonData.message).to.include('Cannot accept booking');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{serviceProviderToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/bookings/provider/requests/{{bookingId}}/accept"
+      }
+    },
+    {
+      "name": "Service Provider - Reject Booking (Success)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const rejectionData = { reason: \"Schedule conflict\" };",
+              "pm.variables.set('rejectionData', JSON.stringify(rejectionData));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Booking request rejected\", function () {",
+              "  pm.expect(jsonData.message).to.include('rejected successfully');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{serviceProviderToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/bookings/provider/requests/{{bookingId}}/reject",
+        "body": {
+          "mode": "raw",
+          "raw": "{{rejectionData}}"
+        }
+      }
+    },
+    {
+      "name": "Service Provider - Reject Booking (Already Rejected)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const rejectionData = { reason: \"Already rejected\" };",
+              "pm.variables.set('rejectionData', JSON.stringify(rejectionData));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "  pm.response.to.have.status(400);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Cannot reject booking message\", function () {",
+              "  pm.expect(jsonData.message).to.include('Cannot reject booking');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{serviceProviderToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/bookings/provider/requests/{{bookingId}}/reject",
+        "body": {
+          "mode": "raw",
+          "raw": "{{rejectionData}}"
+        }
+      }
+    },
+    {
+      "name": "Service Provider - Auto Reject Expired Bookings",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Auto-reject message\", function () {",
+              "  pm.expect(jsonData.message).to.include('auto-rejected');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{serviceProviderToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/bookings/provider/auto-reject-expired"
+      }
+    },
+    {
+      "name": "Service Provider - Check Availability (Success)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const today = new Date();",
+              "const date = today.toISOString().split('T')[0];",
+              "pm.variables.set('testDate', date);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Availability array exists\", function () {",
+              "  pm.expect(jsonData.availability).to.be.an('array');",
+              "  pm.expect(jsonData.summary).to.exist;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{serviceProviderToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/bookings/provider/availability/{{serviceId}}/{{testDate}}"
+      }
+    },
+    {
+      "name": "Service Provider - Check Availability (Not Provider Role)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const today = new Date();",
+              "const date = today.toISOString().split('T')[0];",
+              "pm.variables.set('testDate', date);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 403\", function () {",
+              "  pm.response.to.have.status(403);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Access denied message\", function () {",
+              "  pm.expect(jsonData.message).to.include('Access denied');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/bookings/provider/availability/{{serviceId}}/{{testDate}}"
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "https://localhost:8443", "type": "string" },
+    { "key": "petOwnerToken", "value": "", "type": "string" },
+    { "key": "serviceProviderToken", "value": "", "type": "string" },
+    { "key": "serviceId", "value": "1", "type": "string" },
+    { "key": "petId", "value": "1", "type": "string" },
+    { "key": "bookingId", "value": "1", "type": "string" }
+  ]
+}

@@ -10,19 +10,21 @@ class NotificationService {
      * Create a notification
      */
     createNotification(userId, text, type = 'general', scheduleId = null, relatedId = null, scheduledTime = null) {
-        try {
-            const insertStmt = this.db.prepare(`
-                INSERT INTO notification (userid, text, type, schedule_id, related_id, scheduled_time, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            `);
-            
-            const result = insertStmt.run(userId, text, type, scheduleId, relatedId, scheduledTime);
-            return { success: true, notificationId: result.lastInsertRowid };
-        } catch (error) {
-            console.error('Error creating notification:', error);
-            return { success: false, error: error.message };
-        }
+    try {
+
+        const insertStmt = this.db.prepare(`
+            INSERT INTO notification (userid, text, type, schedule_id, related_id, scheduled_time, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `);
+        console.log('createNotification params:', { userId, text, type, scheduleId, relatedId, scheduledTime });
+
+        const result = insertStmt.run(userId, text, type, scheduleId, relatedId, scheduledTime);
+        return { success: true, notificationId: result.lastInsertRowid };
+    } catch (error) {
+        console.error('Error creating notification:', error);
+        return { success: false, error: error.message };
     }
+}
 
     /**
      * Notify service provider when their service is approved
@@ -213,7 +215,7 @@ class NotificationService {
                 SELECT 
                     b.bookid, b.poid, b.book_timestamp,
                     s.name as service_name,
-                    sp.bussiness_name as provider_name,
+                    sp.business_name as provider_name,
                     b.servedate, b.slot
                 FROM booking b
                 JOIN service s ON b.svid = s.serviceid
@@ -251,7 +253,7 @@ class NotificationService {
                 SELECT 
                     b.bookid, b.poid,
                     s.name as service_name,
-                    sp.bussiness_name as provider_name,
+                    sp.business_name as provider_name,
                     b.servedate, b.slot
                 FROM booking b
                 JOIN service s ON b.svid = s.serviceid

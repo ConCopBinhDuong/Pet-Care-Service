@@ -22,7 +22,7 @@ router.get('/my-reviews', (req, res) => {
                 sr.bookid, sr.stars, sr.comment,
                 b.servedate, b.status as booking_status,
                 s.name as service_name, s.description as service_description,
-                sp.bussiness_name as provider_name,
+                sp.business_name as provider_name,
                 u.name as provider_contact_name
             FROM service_review sr
             JOIN booking b ON sr.bookid = b.bookid
@@ -59,7 +59,7 @@ router.get('/service/:serviceId', (req, res) => {
 
         // Check if service exists and get provider info
         const getServiceStmt = db.prepare(`
-            SELECT s.serviceid, s.name, s.providerid, sp.bussiness_name
+            SELECT s.serviceid, s.name, s.providerid, sp.business_name
             FROM service s
             JOIN serviceprovider sp ON s.providerid = sp.id
             WHERE s.serviceid = ?
@@ -103,7 +103,7 @@ router.get('/service/:serviceId', (req, res) => {
             service: {
                 id: service.serviceid,
                 name: service.name,
-                provider: service.bussiness_name
+                provider: service.business_name
             },
             statistics: {
                 totalReviews: reviews.length,
@@ -131,7 +131,7 @@ router.get('/provider/:providerId', (req, res) => {
 
         // Check if provider exists
         const getProviderStmt = db.prepare(`
-            SELECT sp.id, sp.bussiness_name, u.name
+            SELECT sp.id, sp.business_name, u.name
             FROM serviceprovider sp
             JOIN users u ON sp.id = u.userid
             WHERE sp.id = ?
@@ -197,7 +197,7 @@ router.get('/provider/:providerId', (req, res) => {
             message: 'Provider reviews retrieved successfully',
             provider: {
                 id: provider.id,
-                businessName: provider.bussiness_name,
+                businessName: provider.business_name,
                 contactName: provider.name
             },
             statistics: {
@@ -461,7 +461,7 @@ router.get('/booking/:bookingId', (req, res) => {
                 sr.bookid, sr.stars, sr.comment,
                 b.poid, b.servedate, b.book_timestamp, b.status,
                 s.serviceid, s.name as service_name, s.description as service_description,
-                sp.id as provider_id, sp.bussiness_name as provider_name,
+                sp.id as provider_id, sp.business_name as provider_name,
                 u_reviewer.name as reviewer_name,
                 u_provider.name as provider_contact_name
             FROM service_review sr

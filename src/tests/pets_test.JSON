@@ -1,0 +1,306 @@
+{
+  "info": {
+    "_postman_id": "pets-test-collection",
+    "name": "Pet Care Service - Pets Tests",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Pet Management Tests",
+      "item": [
+        {
+          "name": "Create Pet",
+          "item": [
+            {
+              "name": "Add Pet - Golden Retriever",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "const testData = {",
+                      "    name: \"Max\",",
+                      "    breed: \"Golden Retriever\",",
+                      "    age: 2,",
+                      "    description: \"Friendly and energetic Golden Retriever\",",
+                      "    dob: \"2021-06-15\",",
+                      "    picture: \"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD...\"",
+                      "};",
+                      "",
+                      "pm.variables.set('testPet', JSON.stringify(testData));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status code is 201\", function () {",
+                      "    pm.response.to.have.status(201);",
+                      "});",
+                      "",
+                      "pm.test(\"Pet created successfully\", function () {",
+                      "    const jsonData = pm.response.json();",
+                      "    pm.expect(jsonData.success).to.be.true;",
+                      "    pm.expect(jsonData.pet).to.include.all.keys(",
+                      "        'petid', 'name', 'breed', 'age', 'description', 'dob', 'picture'",
+                      "    );",
+                      "    pm.variables.set('testPetId', jsonData.pet.petid);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{petOwnerToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{{testPet}}"
+                },
+                "url": "{{baseUrl}}/api/pets"
+              }
+            },
+            {
+              "name": "Add Pet - Siamese Cat",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "const testData = {",
+                      "    name: \"Luna\",",
+                      "    breed: \"Siamese\",",
+                      "    age: 1,",
+                      "    description: \"Elegant and vocal Siamese cat\",",
+                      "    dob: \"2022-03-10\",",
+                      "    picture: \"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD...\"",
+                      "};",
+                      "",
+                      "pm.variables.set('testPet', JSON.stringify(testData));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status code is 201\", function () {",
+                      "    pm.response.to.have.status(201);",
+                      "});",
+                      "",
+                      "pm.test(\"Pet created successfully\", function () {",
+                      "    const jsonData = pm.response.json();",
+                      "    pm.expect(jsonData.success).to.be.true;",
+                      "    pm.expect(jsonData.pet.breed).to.eql('Siamese');",
+                      "    pm.variables.set('siamesePetId', jsonData.pet.petid);",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{petOwnerToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{{testPet}}"
+                },
+                "url": "{{baseUrl}}/api/pets"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read Operations",
+          "item": [
+            {
+              "name": "Get All Pets",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{petOwnerToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/pets"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status code is 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test(\"Pets list is not empty\", function () {",
+                      "    const jsonData = pm.response.json();",
+                      "    pm.expect(jsonData.pets).to.be.an('array').that.is.not.empty;",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Get Pet by ID",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{petOwnerToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/pets/{{testPetId}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status code is 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test(\"Pet details are correct\", function () {",
+                      "    const jsonData = pm.response.json();",
+                      "    pm.expect(jsonData.pet).to.include.all.keys(",
+                      "        'petid', 'name', 'breed', 'age', 'description', 'dob', 'picture'",
+                      "    );",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Update Operations",
+          "item": [
+            {
+              "name": "Update Pet Details",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "exec": [
+                      "const updatedData = {",
+                      "    name: \"Max Updated\",",
+                      "    breed: \"Golden Retriever Mix\",",
+                      "    age: 3,",
+                      "    description: \"Updated description for Max\",",
+                      "    dob: \"2021-06-15\"",
+                      "};",
+                      "",
+                      "pm.variables.set('updatedPet', JSON.stringify(updatedData));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status code is 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test(\"Pet updated successfully\", function () {",
+                      "    const jsonData = pm.response.json();",
+                      "    pm.expect(jsonData.success).to.be.true;",
+                      "    pm.expect(jsonData.pet.name).to.eql('Max Updated');",
+                      "});"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{petOwnerToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{{updatedPet}}"
+                },
+                "url": "{{baseUrl}}/api/pets/{{testPetId}}"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Operations",
+          "item": [
+            {
+              "name": "Delete Pet",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{petOwnerToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/pets/{{testPetId}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status code is 200\", function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test(\"Pet deleted successfully\", function () {",
+                      "    const jsonData = pm.response.json();",
+                      "    pm.expect(jsonData.success).to.be.true;",
+                      "    pm.expect(jsonData.message).to.include('deleted');",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+      
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://localhost:8443",
+      "type": "string"
+    }
+  ]
+}

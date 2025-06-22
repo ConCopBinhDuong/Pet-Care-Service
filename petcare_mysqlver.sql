@@ -29,7 +29,7 @@ create table petowner (
 
 create table serviceprovider (
 	id int,
-    bussiness_name varchar(20),
+    business_name varchar(20),
     logo longblob,
     phone varchar(20) unique,
     description mediumtext,

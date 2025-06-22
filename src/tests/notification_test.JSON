@@ -1,0 +1,270 @@
+{
+  "info": {
+    "name": "Pet Care Service - Notifications Tests",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Get User Notifications",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Notifications array exists\", function () {",
+              "  pm.expect(jsonData.notifications).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/notifications"
+      }
+    },
+    {
+      "name": "Get User Notifications - Unread Only",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Notifications array exists\", function () {",
+              "  pm.expect(jsonData.notifications).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/notifications?unreadOnly=true"
+      }
+    },
+    {
+      "name": "Get Notification Stats",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Stats object exists\", function () {",
+              "  pm.expect(jsonData.stats).to.exist;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/notifications/stats"
+      }
+    },
+    {
+      "name": "Mark Notification as Read",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Set a notificationId for testing, or fetch from previous response",
+              "pm.variables.set('notificationId', pm.environment.get('notificationId') || 1);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Marked as read message\", function () {",
+              "  pm.expect(jsonData.message).to.include('marked as read');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/notifications/{{notificationId}}/read"
+      }
+    },
+    {
+      "name": "Mark All Notifications as Read",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"All notifications marked as read\", function () {",
+              "  pm.expect(jsonData.message).to.include('All notifications marked as read');",
+              "  pm.expect(jsonData.updatedCount).to.be.a('number');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/notifications/read-all"
+      }
+    },
+    {
+      "name": "Delete Notification",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Set a notificationId for testing, or fetch from previous response",
+              "pm.variables.set('notificationId', pm.environment.get('notificationId') || 1);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Notification deleted\", function () {",
+              "  pm.expect(jsonData.message).to.include('deleted successfully');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/notifications/{{notificationId}}"
+      }
+    },
+    {
+      "name": "Manual Schedule Check (Manager)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Manual notification check completed\", function () {",
+              "  pm.expect(jsonData.message).to.include('Manual notification check completed');",
+              "  pm.expect(jsonData.results).to.have.all.keys('petSchedules', 'bookingStatus');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{managerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/notifications/check-schedules"
+      }
+    },
+    {
+      "name": "Get Admin Notification Stats",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Admin stats structure\", function () {",
+              "  pm.expect(jsonData.dailyStats).to.be.an('array');",
+              "  pm.expect(jsonData.typeStats).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{managerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/notifications/admin/stats"
+      }
+    },
+    {
+      "name": "Cleanup Old Notifications (Admin)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Cleanup operation completed\", function () {",
+              "  pm.expect(jsonData.message).to.include('Cleanup operation completed successfully');",
+              "  pm.expect(jsonData.deletedCount).to.be.a('number');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{managerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/notifications/admin/cleanup"
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "https://localhost:8443", "type": "string" },
+    { "key": "userToken", "value": "", "type": "string" },
+    { "key": "managerToken", "value": "", "type": "string" },
+    { "key": "notificationId", "value": "1", "type": "string" }
+  ]
+}

@@ -40,7 +40,7 @@ router.get('/dashboard', authMiddleware, (req, res) => {
                 s.duration,
                 s.price,
                 st.type as service_type,
-                sp.bussiness_name as provider_name,
+                sp.business_name as provider_name,
                 sp.phone as provider_phone,
                 sp.address as provider_address,
                 u.name as provider_contact_name,
@@ -183,7 +183,7 @@ router.get('/weekly', authMiddleware, (req, res) => {
                 s.duration,
                 s.price,
                 st.type as service_type,
-                sp.bussiness_name as provider_name
+                sp.business_name as provider_name
             FROM booking b
             JOIN service s ON b.svid = s.serviceid
             JOIN servicetype st ON s.typeid = st.typeid
@@ -283,7 +283,7 @@ router.get('/today', authMiddleware, (req, res) => {
                 s.duration,
                 s.price,
                 st.type as service_type,
-                sp.bussiness_name as provider_name,
+                sp.business_name as provider_name,
                 sp.phone as provider_phone,
                 sp.address as provider_address
             FROM booking b

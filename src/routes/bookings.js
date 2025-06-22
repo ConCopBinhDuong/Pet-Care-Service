@@ -8,8 +8,8 @@ const router = express.Router();
 // Get all bookings for the authenticated pet owner
 router.get('/', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
 
         // Only pet owners can access this endpoint
         if (userRole !== 'Pet owner') {
@@ -26,7 +26,7 @@ router.get('/', (req, res) => {
                 s.price,
                 s.duration,
                 st.type as service_type,
-                sp.businessname as provider_name,
+                sp.business_name as provider_name,
                 b.slot,
                 b.book_timestamp,
                 b.servedate,
@@ -72,8 +72,8 @@ router.get('/', (req, res) => {
 // Get booking details by ID
 router.get('/:bookingId', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const { bookingId } = req.params;
 
         // Only pet owners can access this endpoint
@@ -144,8 +144,8 @@ router.get('/:bookingId', (req, res) => {
 // Create a new service booking (Reserve service endpoint)
 router.post('/', validateBookingCreation, (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
 
         // Only pet owners can make bookings
         if (userRole !== 'Pet owner') {
@@ -155,6 +155,16 @@ router.post('/', validateBookingCreation, (req, res) => {
         }
 
         const { serviceid, slot, servedate, payment_method, petIds } = req.body;
+
+        // Validate required parameters
+        if (
+            !serviceid || !slot || !servedate || !payment_method ||
+            !Array.isArray(petIds) || petIds.length === 0
+        ) {
+            return res.status(400).json({
+                message: 'Missing required booking parameters'
+            });
+        }
 
         // Verify the service exists
         const getServiceStmt = db.prepare(`
@@ -207,35 +217,36 @@ router.post('/', validateBookingCreation, (req, res) => {
             }
         }
 
-        // Start transaction
-        const transaction = db.transaction(() => {
+        let bookingId;
+        try {
+            db.exec("BEGIN TRANSACTION");
+
             // Create the booking
             const createBookingStmt = db.prepare(`
                 INSERT INTO booking (poid, svid, slot, servedate, payment_method, status)
                 VALUES (?, ?, ?, ?, ?, 'pending')
             `);
-            
             const bookingResult = createBookingStmt.run(userId, serviceid, slot, servedate, payment_method);
-            const bookingId = bookingResult.lastInsertRowid;
+            bookingId = bookingResult.lastInsertRowid;
 
             // Link pets to the booking
             const linkPetStmt = db.prepare(`
                 INSERT INTO booking_pet (bookid, petid) VALUES (?, ?)
             `);
-            
             for (let petId of petIds) {
                 linkPetStmt.run(bookingId, petId);
             }
 
-            return bookingId;
-        });
-
-        const bookingId = transaction();
+            db.exec("COMMIT");
+        } catch (err) {
+            db.exec("ROLLBACK");
+            throw err;
+        }
 
         // Send notification to service provider about new booking request
         try {
             const getProviderStmt = db.prepare(`
-                SELECT s.providerid, sp.bussiness_name, u.name as customer_name
+                SELECT s.providerid, sp.business_name, u.name as customer_name
                 FROM service s
                 JOIN serviceprovider sp ON s.providerid = sp.id
                 JOIN users u ON u.userid = ?
@@ -281,11 +292,12 @@ router.post('/', validateBookingCreation, (req, res) => {
     }
 });
 
+
 // Update booking status or details
 router.put('/:bookingId', validateBookingUpdate, (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const { bookingId } = req.params;
         const { servedate, payment_method, status } = req.body;
 
@@ -363,8 +375,8 @@ router.put('/:bookingId', validateBookingUpdate, (req, res) => {
 // Cancel a booking
 router.delete('/:bookingId', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;;
         const { bookingId } = req.params;
 
         // Only pet owners can cancel their bookings
@@ -428,8 +440,8 @@ router.delete('/:bookingId', (req, res) => {
  */
 router.get('/provider/requests', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
 
         // Only service providers can access this endpoint
         if (userRole !== 'Service provider') {
@@ -549,8 +561,8 @@ router.get('/provider/requests', (req, res) => {
  */
 router.get('/provider/requests/:bookingId', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const { bookingId } = req.params;
 
         // Only service providers can access this endpoint
@@ -657,8 +669,8 @@ router.get('/provider/requests/:bookingId', (req, res) => {
  */
 router.post('/provider/requests/:bookingId/accept', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const { bookingId } = req.params;
 
         // Only service providers can accept booking requests
@@ -671,7 +683,7 @@ router.post('/provider/requests/:bookingId/accept', (req, res) => {
         // Verify booking exists and belongs to provider
         const getBookingStmt = db.prepare(`
             SELECT 
-                b.bookid, b.svid, b.slot, b.servedate, b.status, b.book_timestamp,
+                b.bookid, b.svid, b.poid, b.slot, b.servedate, b.status, b.book_timestamp,
                 s.name as service_name, s.providerid,
                 u.name as customer_name, u.email as customer_email
             FROM booking b
@@ -786,8 +798,8 @@ router.post('/provider/requests/:bookingId/accept', (req, res) => {
  */
 router.post('/provider/requests/:bookingId/reject', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const { bookingId } = req.params;
         const { reason } = req.body;
 
@@ -837,7 +849,7 @@ router.post('/provider/requests/:bookingId/reject', (req, res) => {
         try {
             // Get provider name for notification
             const getProviderNameStmt = db.prepare(`
-                SELECT sp.bussiness_name
+                SELECT sp.business_name
                 FROM serviceprovider sp
                 WHERE sp.id = ?
             `);
@@ -847,7 +859,7 @@ router.post('/provider/requests/:bookingId/reject', (req, res) => {
                 booking.bookid,
                 booking.poid,
                 booking.service_name,
-                providerInfo?.bussiness_name || 'Service Provider',
+                providerInfo?.business_name || 'Service Provider',
                 booking.servedate,
                 booking.slot,
                 reason
@@ -885,8 +897,8 @@ router.post('/provider/requests/:bookingId/reject', (req, res) => {
  */
 router.post('/provider/auto-reject-expired', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
 
         // Only service providers can trigger auto-rejection
         if (userRole !== 'Service provider') {
@@ -927,7 +939,7 @@ router.post('/provider/auto-reject-expired', (req, res) => {
 
         // Get provider name for notifications
         const getProviderNameStmt = db.prepare(`
-            SELECT bussiness_name FROM serviceprovider WHERE id = ?
+            SELECT business_name FROM serviceprovider WHERE id = ?
         `);
         const providerInfo = getProviderNameStmt.get(userId);
 
@@ -950,7 +962,7 @@ router.post('/provider/auto-reject-expired', (req, res) => {
                         booking.bookid,
                         bookingDetails.poid,
                         booking.service_name,
-                        providerInfo?.bussiness_name || 'Service Provider',
+                        providerInfo?.business_name || 'Service Provider',
                         bookingDetails.servedate,
                         bookingDetails.slot
                     );
@@ -989,8 +1001,8 @@ router.post('/provider/auto-reject-expired', (req, res) => {
  */
 router.get('/provider/availability/:serviceId/:date', (req, res) => {
     try {
-        const userId = req.userId;
-        const userRole = req.userRole;
+        const userId = req.user.userid;
+        const userRole = req.user.role;
         const { serviceId, date } = req.params;
 
         // Only service providers can check availability
