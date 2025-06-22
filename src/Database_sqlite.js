@@ -37,7 +37,7 @@ db.exec(`
 db.exec(`
   CREATE TABLE serviceprovider (
     id INTEGER PRIMARY KEY,
-    bussiness_name TEXT,
+    business_name TEXT,
     logo BLOB,
     phone TEXT UNIQUE,
     description TEXT,

@@ -36,7 +36,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this-in-pro
  * Validates registration data and sends verification codes
  */
 router.post('/start-verification', validatePreVerificationRegistration, async (req, res) => {
-    const { username, email, password, gender, role, phone, city, address, bussiness_name, description, website } = req.body;
+    const { username, email, password, gender, role, phone, city, address, business_name: business_name, description, website } = req.body;
 
     try {
         // Check if email already exists
@@ -76,7 +76,7 @@ router.post('/start-verification', validatePreVerificationRegistration, async (r
             phone,
             city,
             address,
-            bussiness_name,
+            business_name: business_name,
             description,
             website
         };
@@ -183,7 +183,7 @@ router.post('/complete-registration', validateCompleteRegistration, async (req, 
             });
         }
 
-        const { username, email, password, gender, role, phone, city, address, bussiness_name, description, website } = registrationData;
+        const { username, email, password, gender, role, phone, city, address, business_name, description, website } = registrationData;
 
         // Double-check email doesn't exist (race condition protection)
         const emailExists = db.prepare('SELECT userid FROM users WHERE email = ?').get(email);
@@ -223,10 +223,10 @@ router.post('/complete-registration', validateCompleteRegistration, async (req, 
             insertPetOwner.run(userId, phone || null, city || null, address || null);
         } else if (role === 'Service provider') {
             const insertServiceProvider = db.prepare(`
-                INSERT INTO serviceprovider (id, bussiness_name, phone, description, address, website)
+                INSERT INTO serviceprovider (id, business_name, phone, description, address, website)
                 VALUES (?, ?, ?, ?, ?, ?)
             `);
-            insertServiceProvider.run(userId, bussiness_name || null, phone || null, description || null, address || null, website || null);
+            insertServiceProvider.run(userId, business_name || null, phone || null, description || null, address || null, website || null);
         } else if (role === 'Manager') {
             const insertManager = db.prepare(`
                 INSERT INTO manager (id)
@@ -380,7 +380,7 @@ router.post('/resend-verification-codes', validateVerificationSession, async (re
  * @deprecated Use start-verification instead
  */
 router.post('/register', validateRegistration, async (req, res) => {
-    const { username, email, password, gender, role, phone, city, address, bussiness_name, description, website } = req.body;
+    const { username, email, password, gender, role, phone, city, address, business_name, description, website } = req.body;
 
     try {
         // Check if email already exists
@@ -440,10 +440,10 @@ router.post('/register', validateRegistration, async (req, res) => {
             insertPetOwner.run(userId, phone || null, city || null, address || null);
         } else if (role === 'Service provider') {
             const insertServiceProvider = db.prepare(`
-                INSERT INTO serviceprovider (id, bussiness_name, phone, description, address, website)
+                INSERT INTO serviceprovider (id, business_name, phone, description, address, website)
                 VALUES (?, ?, ?, ?, ?, ?)
             `);
-            insertServiceProvider.run(userId, bussiness_name || null, phone || null, description || null, address || null, website || null);
+            insertServiceProvider.run(userId, business_name || null, phone || null, description || null, address || null, website || null);
         } else if (role === 'Manager') {
             const insertManager = db.prepare(`
                 INSERT INTO manager (id)

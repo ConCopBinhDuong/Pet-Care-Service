@@ -17,7 +17,7 @@ router.get('/booking/:bookingId', (req, res) => {
             SELECT 
                 b.bookid, b.poid, b.status,
                 s.providerid,
-                sp.bussiness_name as provider_name,
+                sp.business_name as provider_name,
                 po.id as owner_id,
                 u_owner.name as owner_name,
                 u_provider.name as provider_contact_name
@@ -60,7 +60,7 @@ router.get('/booking/:bookingId', (req, res) => {
                 su.text,
                 su.image,
                 'service_provider' as sender_type,
-                sp.bussiness_name as sender_name,
+                sp.business_name as sender_name,
                 u.name as sender_contact_name,
                 datetime('now') as timestamp
             FROM service_update su
@@ -159,7 +159,7 @@ router.post('/booking/:bookingId/message', validateChatMessage, (req, res) => {
 
         // Get service provider info for notification
         const providerInfoStmt = db.prepare(`
-            SELECT sp.bussiness_name, u.name as contact_name
+            SELECT sp.business_name, u.name as contact_name
             FROM serviceprovider sp
             JOIN users u ON sp.id = u.userid
             WHERE sp.id = ?
@@ -171,7 +171,7 @@ router.post('/booking/:bookingId/message', validateChatMessage, (req, res) => {
         try {
             const notificationResult = notificationService.createNotification(
                 booking.poid,
-                `New update from ${providerInfo.bussiness_name}: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`,
+                `New update from ${providerInfo.business_name}: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`,
                 'booking_update',
                 null,
                 bookingId
@@ -192,7 +192,7 @@ router.post('/booking/:bookingId/message', validateChatMessage, (req, res) => {
                 no_update: nextUpdateNumber,
                 text: text,
                 has_image: !!image,
-                sender: providerInfo.bussiness_name,
+                sender: providerInfo.business_name,
                 timestamp: new Date().toISOString()
             }
         });
@@ -219,7 +219,7 @@ router.get('/conversations', (req, res) => {
                     b.status,
                     b.servedate,
                     s.name as service_name,
-                    sp.bussiness_name as provider_name,
+                    sp.business_name as provider_name,
                     u.name as provider_contact_name,
                     COUNT(su.no_update) as message_count,
                     MAX(su.no_update) as last_update_number
@@ -229,7 +229,7 @@ router.get('/conversations', (req, res) => {
                 JOIN users u ON sp.id = u.userid
                 LEFT JOIN service_update su ON b.bookid = su.bookid
                 WHERE b.poid = ?
-                GROUP BY b.bookid, b.status, b.servedate, s.name, sp.bussiness_name, u.name
+                GROUP BY b.bookid, b.status, b.servedate, s.name, sp.business_name, u.name
                 ORDER BY b.servedate DESC
             `;
             params = [userId];
@@ -263,7 +263,7 @@ router.get('/conversations', (req, res) => {
                     b.status,
                     b.servedate,
                     s.name as service_name,
-                    sp.bussiness_name as provider_name,
+                    sp.business_name as provider_name,
                     u_provider.name as provider_contact_name,
                     u_owner.name as owner_name,
                     COUNT(su.no_update) as message_count,
@@ -275,7 +275,7 @@ router.get('/conversations', (req, res) => {
                 JOIN petowner po ON b.poid = po.id
                 JOIN users u_owner ON po.id = u_owner.userid
                 LEFT JOIN service_update su ON b.bookid = su.bookid
-                GROUP BY b.bookid, b.status, b.servedate, s.name, sp.bussiness_name, u_provider.name, u_owner.name
+                GROUP BY b.bookid, b.status, b.servedate, s.name, sp.business_name, u_provider.name, u_owner.name
                 ORDER BY b.servedate DESC
             `;
             params = [];

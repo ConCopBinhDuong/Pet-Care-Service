@@ -52,7 +52,7 @@ export const validatePassword = (password) => {
  * Registration validation middleware
  */
 export const validateRegistration = (req, res, next) => {
-    const { username, email, password, gender, role, phone, bussiness_name } = req.body;
+    const { username, email, password, gender, role, phone, business_name } = req.body;
     const errors = [];
 
     // Required fields
@@ -82,7 +82,7 @@ export const validateRegistration = (req, res, next) => {
 
     // Role-specific validation
     if (role === 'Service provider') {
-        if (!bussiness_name || bussiness_name.trim().length < 2) {
+        if (!business_name || business_name.trim().length < 2) {
             errors.push('Business name is required for service providers');
         }
     }
@@ -108,7 +108,7 @@ export const validateRegistration = (req, res, next) => {
  * Validates registration data before starting verification process
  */
 export const validatePreVerificationRegistration = (req, res, next) => {
-    const { username, email, password, gender, role, phone, bussiness_name } = req.body;
+    const { username, email, password, gender, role, phone, business_name } = req.body;
     const errors = [];
 
     // Required fields
@@ -138,7 +138,7 @@ export const validatePreVerificationRegistration = (req, res, next) => {
 
     // Role-specific validation
     if (role === 'Service provider') {
-        if (!bussiness_name || bussiness_name.trim().length < 2) {
+        if (!business_name || business_name.trim().length < 2) {
             errors.push('Business name is required for service providers');
         }
     }

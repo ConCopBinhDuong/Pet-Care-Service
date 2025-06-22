@@ -40,13 +40,13 @@ router.get('/', (req, res) => {
 
         } else if (userRole === 'Service provider') {
             const getServiceProviderStmt = db.prepare(`
-                SELECT bussiness_name, logo, phone, description, address, website 
+                SELECT business_name, logo, phone, description, address, website 
                 FROM serviceprovider WHERE id = ?
             `);
             const serviceProviderData = getServiceProviderStmt.get(userId);
             
             if (serviceProviderData) {
-                profileData.businessName = serviceProviderData.bussiness_name;
+                profileData.businessName = serviceProviderData.business_name;
                 profileData.logo = serviceProviderData.logo;
                 profileData.phone = serviceProviderData.phone;
                 profileData.description = serviceProviderData.description;
@@ -118,7 +118,7 @@ router.put('/', validateProfileUpdate, (req, res) => {
             }
 
         } else if (userRole === 'Service provider') {
-            const allowedProviderFields = ['bussiness_name', 'logo', 'phone', 'description', 'address', 'website'];
+            const allowedProviderFields = ['business_name', 'logo', 'phone', 'description', 'address', 'website'];
             const providerUpdates = {};
             
             allowedProviderFields.forEach(field => {

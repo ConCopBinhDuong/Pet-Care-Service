@@ -22,7 +22,7 @@ router.get('/my-reports', (req, res) => {
                 sr.bookid, sr.text, sr.image,
                 b.servedate, b.status as booking_status, b.book_timestamp,
                 s.name as service_name, s.description as service_description,
-                sp.bussiness_name as provider_name,
+                sp.business_name as provider_name,
                 u.name as provider_contact_name
             FROM service_report sr
             JOIN booking b ON sr.bookid = b.bookid
@@ -59,7 +59,7 @@ router.get('/service/:serviceId', (req, res) => {
 
         // Check if service exists and get provider info
         const getServiceStmt = db.prepare(`
-            SELECT s.serviceid, s.name, s.providerid, sp.bussiness_name
+            SELECT s.serviceid, s.name, s.providerid, sp.business_name
             FROM service s
             JOIN serviceprovider sp ON s.providerid = sp.id
             WHERE s.serviceid = ?
@@ -102,7 +102,7 @@ router.get('/service/:serviceId', (req, res) => {
             service: {
                 id: service.serviceid,
                 name: service.name,
-                provider: service.bussiness_name
+                provider: service.business_name
             },
             statistics: {
                 totalReports: reports.length
@@ -129,7 +129,7 @@ router.get('/provider/:providerId', (req, res) => {
 
         // Check if provider exists
         const getProviderStmt = db.prepare(`
-            SELECT sp.id, sp.bussiness_name, u.name
+            SELECT sp.id, sp.business_name, u.name
             FROM serviceprovider sp
             JOIN users u ON sp.id = u.userid
             WHERE sp.id = ?
@@ -191,7 +191,7 @@ router.get('/provider/:providerId', (req, res) => {
             message: 'Provider reports retrieved successfully',
             provider: {
                 id: provider.id,
-                businessName: provider.bussiness_name,
+                businessName: provider.business_name,
                 contactName: provider.name
             },
             statistics: {
@@ -455,7 +455,7 @@ router.get('/booking/:bookingId', (req, res) => {
                 sr.bookid, sr.text, sr.image,
                 b.poid, b.servedate, b.book_timestamp, b.status,
                 s.serviceid, s.name as service_name, s.description as service_description,
-                sp.id as provider_id, sp.bussiness_name as provider_name,
+                sp.id as provider_id, sp.business_name as provider_name,
                 u_reporter.name as reporter_name,
                 u_provider.name as provider_contact_name
             FROM service_report sr
@@ -539,13 +539,13 @@ router.get('/admin/summary', (req, res) => {
         // Get reports by service provider
         const getReportsByProviderStmt = db.prepare(`
             SELECT 
-                sp.id, sp.bussiness_name,
+                sp.id, sp.business_name,
                 COUNT(*) as report_count
             FROM service_report sr
             JOIN booking b ON sr.bookid = b.bookid
             JOIN service s ON b.svid = s.serviceid
             JOIN serviceprovider sp ON s.providerid = sp.id
-            GROUP BY sp.id, sp.bussiness_name
+            GROUP BY sp.id, sp.business_name
             ORDER BY report_count DESC
         `);
         const reportsByProvider = getReportsByProviderStmt.all();
@@ -556,7 +556,7 @@ router.get('/admin/summary', (req, res) => {
                 sr.bookid, sr.text,
                 b.servedate,
                 s.name as service_name,
-                sp.bussiness_name as provider_name,
+                sp.business_name as provider_name,
                 u.name as reporter_name
             FROM service_report sr
             JOIN booking b ON sr.bookid = b.bookid

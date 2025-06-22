@@ -50,7 +50,7 @@ Content-Type: application/json
     "gender": "Other",
     "role": "Service provider",
     "phone": "0907654321",
-    "bussiness_name": "Premium Pet Care",
+    "business_name": "Premium Pet Care",
     "description": "Professional pet grooming and care services",
     "address": "456 Le Loi Boulevard",
     "website": "https://premiumpetcare.com"
@@ -220,7 +220,7 @@ Content-Type: application/json
 
 {
     "name": "Updated Pet Grooming Service",
-    "bussiness_name": "Premium Pet Care Updated",
+    "business_name": "Premium Pet Care Updated",
     "description": "Updated professional pet grooming services",
     "phone": "0907654999",
     "address": "Updated Address",
