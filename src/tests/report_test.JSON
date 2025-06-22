@@ -1,0 +1,268 @@
+{
+  "info": {
+    "name": "Pet Care Service - Reports Tests",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Create Service Report for Booking",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const reportData = {",
+              "  text: \"Service was excellent and on time.\",",
+              "  image: \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\"",
+              "};",
+              "pm.variables.set('reportData', JSON.stringify(reportData));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 201\", function () {",
+              "  pm.response.to.have.status(201);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Report created successfully\", function () {",
+              "  pm.expect(jsonData.message).to.include('Service report created successfully');",
+              "  pm.expect(jsonData.report).to.have.property('bookingId');",
+              "  pm.environment.set('testBookingId', jsonData.report.bookingId);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/reports/booking/{{bookingId}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{{reportData}}"
+        }
+      }
+    },
+    {
+      "name": "Get My Reports (Pet Owner)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Reports array exists\", function () {",
+              "  pm.expect(jsonData.reports).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/reports/my-reports"
+      }
+    },
+    {
+      "name": "Get Report by Booking ID",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Report details correct\", function () {",
+              "  pm.expect(jsonData.report).to.have.property('bookingId');",
+              "  pm.expect(jsonData.report.bookingId).to.eql(parseInt(pm.environment.get('testBookingId')));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/reports/booking/{{testBookingId}}"
+      }
+    },
+    {
+      "name": "Update Service Report",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const updateData = {",
+              "  text: \"Updated feedback: Service was good, but could be faster.\",",
+              "  image: \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUB\"",
+              "};",
+              "pm.variables.set('updateReportData', JSON.stringify(updateData));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Report updated successfully\", function () {",
+              "  pm.expect(jsonData.message).to.include('Service report updated successfully');",
+              "  pm.expect(jsonData.report.text).to.include('Updated feedback');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/reports/booking/{{testBookingId}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{{updateReportData}}"
+        }
+      }
+    },
+    {
+      "name": "Delete Service Report",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Report deleted successfully\", function () {",
+              "  pm.expect(jsonData.message).to.include('Service report deleted successfully');",
+              "  pm.expect(jsonData.deletedReport.bookingId).to.eql(parseInt(pm.environment.get('testBookingId')));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/reports/booking/{{testBookingId}}"
+      }
+    },
+    {
+      "name": "Get Reports for Service (Service Provider)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Service reports array exists\", function () {",
+              "  pm.expect(jsonData.reports).to.be.an('array');",
+              "  pm.expect(jsonData.service).to.have.property('id');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{serviceProviderToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/reports/service/{{serviceId}}"
+      }
+    },
+    {
+      "name": "Get Reports for Provider (Service Provider)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Provider reports array exists\", function () {",
+              "  pm.expect(jsonData.reports).to.be.an('array');",
+              "  pm.expect(jsonData.provider).to.have.property('id');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{serviceProviderToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/reports/provider/{{providerId}}"
+      }
+    },
+    {
+      "name": "Get Reports Summary (Manager)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Summary object exists\", function () {",
+              "  pm.expect(jsonData.summary).to.have.property('totalReports');",
+              "  pm.expect(jsonData.summary).to.have.property('providerBreakdown');",
+              "  pm.expect(jsonData.summary).to.have.property('recentReports');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{managerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/reports/admin/summary"
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "https://localhost:8443", "type": "string" },
+    { "key": "petOwnerToken", "value": "", "type": "string" },
+    { "key": "serviceProviderToken", "value": "", "type": "string" },
+    { "key": "managerToken", "value": "", "type": "string" },
+    { "key": "bookingId", "value": "1", "type": "string" },
+    { "key": "serviceId", "value": "1", "type": "string" },
+    { "key": "providerId", "value": "1", "type": "string" }
+  ]
+}

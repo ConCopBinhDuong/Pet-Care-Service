@@ -97,44 +97,66 @@
       "item": [
         {
           "name": "Submit New Service",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{serviceProviderToken}}"
-              }
-            ],
-            "url": "{{baseUrl}}/api/services/submit",
-            "body": {
-              "mode": "raw",
-              "raw": "{{exampleService}}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Example service data for testing",
+              "const exampleService = {",
+              "    name: \"Professional Dog Walking Service\",",
+              "    price: 30.00,",
+              "    description: \"Expert dog walking service with experienced handlers\",",
+              "    duration: \"60\",",
+              "    typeid: 1,",
+              "    timeSlots: [\"09:00\", \"14:00\", \"16:00\"]",
+              "};",
+              "",
+              "pm.environment.set('exampleService', JSON.stringify(exampleService));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 201\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test(\"Service submitted successfully\", function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData.message).to.include('submitted successfully');",
+              "    pm.expect(jsonData.service).to.have.property('serviceid');",
+              "    pm.environment.set('newServiceId', jsonData.service.serviceid);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{serviceProviderToken}}"
           },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 201\", function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});",
-                  "",
-                  "pm.test(\"Service submitted successfully\", function () {",
-                  "    const jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.message).to.include('submitted successfully');",
-                  "    pm.expect(jsonData.service).to.have.property('serviceid');",
-                  "    pm.environment.set('newServiceId', jsonData.service.serviceid);",
-                  "});"
-                ]
-              }
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/services/submit",
+        "body": {
+          "mode": "raw",
+          "raw": "{{exampleService}}",
+          "options": {
+            "raw": {
+              "language": "json"
             }
-          ]
+          }
+        }
+      }
         },
         {
           "name": "Get My Services",

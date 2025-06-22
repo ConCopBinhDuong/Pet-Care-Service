@@ -1,0 +1,166 @@
+{
+  "info": {
+    "name": "Pet Care Service - Profile Tests",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Get Current User Profile",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Profile object exists\", function () {",
+              "  pm.expect(jsonData.profile).to.exist;",
+              "  pm.expect(jsonData.profile).to.have.property('id');",
+              "  pm.expect(jsonData.profile).to.have.property('name');",
+              "  pm.expect(jsonData.profile).to.have.property('email');",
+              "  pm.expect(jsonData.profile).to.have.property('role');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/profile"
+      }
+    },
+    {
+      "name": "Update Profile (Pet Owner)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const updateData = {",
+              "  name: \"John Updated\",",
+              "  gender: \"Male\",",
+              "  phone: \"+84123456789\",",
+              "  city: \"Hanoi\",",
+              "  address: \"456 New St\"",
+              "};",
+              "pm.variables.set('updateProfileData', JSON.stringify(updateData));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Profile updated message\", function () {",
+              "  pm.expect(jsonData.message).to.include('Profile updated successfully');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{userToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/profile",
+        "body": {
+          "mode": "raw",
+          "raw": "{{updateProfileData}}"
+        }
+      }
+    },
+    {
+      "name": "Update Profile (Service Provider)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const updateData = {",
+              "  name: \"Pet Care Center Updated\",",
+              "  gender: \"Other\",",
+              "  business_name: \"Pet Care Center\",",
+              "  logo: \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA\",",
+              "  phone: \"+84987654321\",",
+              "  description: \"Updated description\",",
+              "  address: \"789 Business St\",",
+              "  website: \"www.petcare-updated.com\"",
+              "};",
+              "pm.variables.set('updateProviderProfileData', JSON.stringify(updateData));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Profile updated message\", function () {",
+              "  pm.expect(jsonData.message).to.include('Profile updated successfully');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{serviceProviderToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/profile",
+        "body": {
+          "mode": "raw",
+          "raw": "{{updateProviderProfileData}}"
+        }
+      }
+    },
+    {
+      "name": "Delete User Account",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Account deleted message\", function () {",
+              "  pm.expect(jsonData.message).to.include('Account deleted successfully');",
+              "  pm.expect(jsonData.deletedUser).to.have.property('id');",
+              "  pm.expect(jsonData.deletedUser).to.have.property('email');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/profile"
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "https://localhost:8443", "type": "string" },
+    { "key": "userToken", "value": "", "type": "string" },
+    { "key": "serviceProviderToken", "value": "", "type": "string" }
+  ]
+}

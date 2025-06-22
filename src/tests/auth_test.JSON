@@ -57,7 +57,7 @@
             "url": "{{baseUrl}}/api/auth/register",
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"username\": \"Pet Care Center\",\n    \"email\": \"service@example.com\",\n    \"password\": \"Service123\",\n    \"gender\": \"Other\",\n    \"role\": \"Service provider\",\n    \"phone\": \"+84987654321\",\n    \"bussiness_name\": \"Pet Care Center\",\n    \"description\": \"Professional pet care services\",\n    \"address\": \"456 Business St\",\n    \"website\": \"www.petcare.com\"\n}"
+              "raw": "{\n    \"username\": \"Pet Care Center\",\n    \"email\": \"service@example.com\",\n    \"password\": \"Service123\",\n    \"gender\": \"Other\",\n    \"role\": \"Service provider\",\n    \"phone\": \"+84987654321\",\n    \"business_name\": \"Pet Care Center\",\n    \"description\": \"Professional pet care services\",\n    \"address\": \"456 Business St\",\n    \"website\": \"www.petcare.com\"\n}"
             }
           },
           "event": [

@@ -1,0 +1,257 @@
+{
+  "info": {
+    "name": "Pet Care Service - Schedule Dashboard Tests",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Pet Owner - Get Schedule Dashboard",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Dashboard object exists\", function () {",
+              "  pm.expect(jsonData.dashboard).to.exist;",
+              "  pm.expect(jsonData.dashboard).to.have.property('appointments');",
+              "  pm.expect(jsonData.dashboard).to.have.property('statistics');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/schedule/dashboard"
+      }
+    },
+    {
+      "name": "Pet Owner - Get Weekly Schedule",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Weekly schedule object exists\", function () {",
+              "  pm.expect(jsonData.weeklySchedule).to.exist;",
+              "  pm.expect(jsonData.weeklySchedule).to.have.property('schedule');",
+              "  pm.expect(jsonData.weeklySchedule).to.have.property('totalAppointments');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/schedule/weekly"
+      }
+    },
+    {
+      "name": "Pet Owner - Get Today's Schedule",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Today's schedule object exists\", function () {",
+              "  pm.expect(jsonData.todaySchedule).to.exist;",
+              "  pm.expect(jsonData.todaySchedule).to.have.property('appointments');",
+              "  pm.expect(jsonData.todaySchedule).to.have.property('statistics');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/schedule/today"
+      }
+    },
+    {
+      "name": "Service Provider - Get Work Schedule Dashboard",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Dashboard object exists\", function () {",
+              "  pm.expect(jsonData.dashboard).to.exist;",
+              "  pm.expect(jsonData.dashboard).to.have.property('workAppointments');",
+              "  pm.expect(jsonData.dashboard).to.have.property('statistics');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{serviceProviderToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/schedule/provider-dashboard"
+      }
+    },
+    {
+      "name": "Service Provider - Get Monthly Schedule",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Monthly schedule object exists\", function () {",
+              "  pm.expect(jsonData.monthlySchedule).to.exist;",
+              "  pm.expect(jsonData.monthlySchedule).to.have.property('schedule');",
+              "  pm.expect(jsonData.monthlySchedule).to.have.property('statistics');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{serviceProviderToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/schedule/monthly"
+      }
+    },
+    {
+      "name": "Service Provider - Get Today's Work Schedule",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Today's work schedule object exists\", function () {",
+              "  pm.expect(jsonData.todayWorkSchedule).to.exist;",
+              "  pm.expect(jsonData.todayWorkSchedule).to.have.property('appointments');",
+              "  pm.expect(jsonData.todayWorkSchedule).to.have.property('statistics');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{serviceProviderToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/schedule/provider-today"
+      }
+    },
+    {
+      "name": "General - Create Schedule Entry",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const now = new Date();",
+              "now.setMinutes(now.getMinutes() + 10);",
+              "const scheduled_time = now.toISOString();",
+              "const scheduleData = {",
+              "  scheduled_time: scheduled_time,",
+              "  title: \"Vet Appointment\",",
+              "  detail: \"Annual checkup for Max\"" ,
+              "};",
+              "pm.variables.set('generalScheduleData', JSON.stringify(scheduleData));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 201\", function () {",
+              "  pm.response.to.have.status(201);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Schedule entry created\", function () {",
+              "  pm.expect(jsonData.schedule).to.exist;",
+              "  pm.expect(jsonData.schedule).to.have.property('scheduleid');",
+              "  pm.environment.set('generalScheduleId', jsonData.schedule.scheduleid);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/schedule/create",
+        "body": {
+          "mode": "raw",
+          "raw": "{{generalScheduleData}}"
+        }
+      }
+    },
+    {
+      "name": "General - Get Schedule Entries",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Schedule entries array exists\", function () {",
+              "  pm.expect(jsonData.scheduleEntries).to.be.an('array');",
+              "  pm.expect(jsonData).to.have.property('totalEntries');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/schedule/entries"
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "https://localhost:8443", "type": "string" },
+    { "key": "petOwnerToken", "value": "", "type": "string" },
+    { "key": "serviceProviderToken", "value": "", "type": "string" }
+  ]
+}

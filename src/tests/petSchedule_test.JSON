@@ -1,0 +1,220 @@
+{
+  "info": {
+    "name": "Pet Care Service - Pet Schedule Tests",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Create Schedule (Diet)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const today = new Date();",
+              "const startdate = today.toISOString().split('T')[0];",
+              "const scheduleData = {",
+              "  startdate: startdate,",
+              "  repeat_option: \"daily\",",
+              "  hour: 8,",
+              "  minute: 0,",
+              "  dietid: parseInt(pm.environment.get('dietId')),",
+              "  activityid: null",
+              "};",
+              "pm.variables.set('scheduleData', JSON.stringify(scheduleData));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 201\", function () {",
+              "  pm.response.to.have.status(201);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Schedule created successfully\", function () {",
+              "  pm.expect(jsonData.message).to.include('Schedule added successfully');",
+              "  pm.expect(jsonData.schedule).to.have.property('petscheduleid');",
+              "  pm.environment.set('scheduleId', jsonData.schedule.petscheduleid);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/pet-schedule",
+        "body": {
+          "mode": "raw",
+          "raw": "{{scheduleData}}"
+        }
+      }
+    },
+    {
+      "name": "Get All Schedules for User",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Schedules array exists\", function () {",
+              "  pm.expect(jsonData.schedules).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/pet-schedule"
+      }
+    },
+    {
+      "name": "Get Schedules for Specific Pet",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Schedules for pet are returned\", function () {",
+              "  pm.expect(jsonData.pet).to.have.property('id');",
+              "  pm.expect(jsonData.schedules).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/pet-schedule/pet/{{petId}}"
+      }
+    },
+    {
+      "name": "Get Schedule by ID",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Schedule details correct\", function () {",
+              "  pm.expect(jsonData.schedule).to.have.property('petscheduleid');",
+              "  pm.expect(jsonData.schedule.petscheduleid).to.eql(parseInt(pm.environment.get('scheduleId')));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/pet-schedule/{{scheduleId}}"
+      }
+    },
+    {
+      "name": "Update Schedule",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const updateData = {",
+              "  startdate: \"2025-07-01\",",
+              "  repeat_option: \"weekly\",",
+              "  hour: 9,",
+              "  minute: 30",
+              "};",
+              "pm.variables.set('updateScheduleData', JSON.stringify(updateData));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Schedule updated successfully\", function () {",
+              "  pm.expect(jsonData.message).to.include('Schedule updated successfully');",
+              "  pm.expect(jsonData.schedule.repeat_option).to.eql('weekly');",
+              "  pm.expect(jsonData.schedule.hour).to.eql(9);",
+              "  pm.expect(jsonData.schedule.minute).to.eql(30);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/pet-schedule/{{scheduleId}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{{updateScheduleData}}"
+        }
+      }
+    },
+    {
+      "name": "Delete Schedule",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const jsonData = pm.response.json();",
+              "pm.test(\"Schedule deleted successfully\", function () {",
+              "  pm.expect(jsonData.message).to.include('Schedule deleted successfully');",
+              "  pm.expect(jsonData.deletedSchedule.id).to.eql(parseInt(pm.environment.get('scheduleId')));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/pet-schedule/{{scheduleId}}"
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "https://localhost:8443", "type": "string" },
+    { "key": "petOwnerToken", "value": "", "type": "string" },
+    { "key": "petId", "value": "1", "type": "string" },
+    { "key": "dietId", "value": "1", "type": "string" }
+  ]
+}
