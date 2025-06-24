@@ -1127,7 +1127,7 @@ export const validateReportUpdate = (req, res, next) => {
  * Service submission validation middleware
  */
 export const validateServiceSubmission = (req, res, next) => {
-    const { name, price, description, duration, typeid } = req.body;
+    const { name, price, description, duration, typeid, serviceType } = req.body;
     const errors = [];
 
     // Validate service name
@@ -1166,11 +1166,47 @@ export const validateServiceSubmission = (req, res, next) => {
         errors.push('Service duration cannot exceed 50 characters');
     }
 
-    // Validate service type ID
-    if (!typeid && typeid !== 0) {
-        errors.push('Service type ID is required');
-    } else if (typeof typeid !== 'number' || isNaN(typeid) || typeid <= 0) {
-        errors.push('Service type ID must be a valid positive number');
+    // Validate service type - either typeid (existing) or serviceType (new)
+    
+    if (!typeid && !serviceType) {
+        errors.push('Either service type ID (for existing type) or service type name (for new type) is required');
+    } else if (typeid && serviceType) {
+        errors.push('Provide either service type ID or service type name, not both');
+    } else if (typeid) {
+        // Validate existing service type ID
+        if (typeof typeid !== 'number' || isNaN(typeid) || typeid <= 0) {
+            errors.push('Service type ID must be a valid positive number');
+        }
+    } else if (serviceType) {
+        // Validate new service type name
+        if (typeof serviceType !== 'string' || serviceType.trim().length === 0) {
+            errors.push('Service type name is required and cannot be empty');
+        } else if (serviceType.trim().length < 3) {
+            errors.push('Service type name must be at least 3 characters long');
+        } else if (serviceType.trim().length > 50) {
+            errors.push('Service type name cannot exceed 50 characters');
+        }
+    }
+
+    // Validate license (optional but recommended)
+    if (req.body.license) {
+        const { license } = req.body;
+        if (typeof license !== 'string') {
+            errors.push('License must be a string (base64 encoded file)');
+        } else {
+            // Check if it's a valid base64 format for PDF or image
+            const isValidBase64 = /^data:(application\/pdf|image\/(jpeg|jpg|png));base64,/.test(license);
+            if (!isValidBase64) {
+                errors.push('License must be a valid base64 encoded PDF or image file');
+            } else {
+                // Check file size (10MB limit for license documents)
+                const base64Data = license.split(',')[1];
+                const fileSize = (base64Data.length * 3) / 4; // Approximate size in bytes
+                if (fileSize > 10 * 1024 * 1024) { // 10MB limit
+                    errors.push('License file size cannot exceed 10MB');
+                }
+            }
+        }
     }
 
     // Validate time slots if provided

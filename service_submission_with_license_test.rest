@@ -1,0 +1,226 @@
+# ### Service Submission with License Tests
+# ### Tests for service providers to submit services with license documents
+# ### Make sure server is running on HTTPS (port 8443)
+
+# @baseUrl = https://localhost:8443/api
+# @serviceProviderEmail = service.provider@example.com
+# @serviceProviderPassword = SecurePass123!
+# @managerEmail = manager@petcare.com 
+# @managerPassword = AdminPass123!
+
+# # ===================================================================
+# # AUTHENTICATION - Get tokens for testing
+# # ===================================================================
+
+# ### 1. Login as Service Provider
+# POST {{baseUrl}}/auth/login
+# Content-Type: application/json
+
+# {
+#     "email": "{{serviceProviderEmail}}",
+#     "password": "{{serviceProviderPassword}}"
+# }
+
+# ### 2. Login as Manager  
+# POST {{baseUrl}}/auth/login
+# Content-Type: application/json
+
+# {
+#     "email": "{{managerEmail}}",
+#     "password": "{{managerPassword}}"
+# }
+
+# # ===================================================================
+# # SERVICE SUBMISSION WITH LICENSE TESTS
+# # ===================================================================
+
+# ### 3. Submit Service with License (PDF Document)
+# POST {{baseUrl}}/services
+# Authorization: Bearer {{serviceProviderToken}}
+# Content-Type: application/json
+
+# {
+#     "name": "Professional Pet Grooming with License",
+#     "price": 200000,
+#     "description": "Premium grooming service with certified professional license and insurance coverage",
+#     "duration": "2.5 hours",
+#     "typeid": 2,
+#     "license": "data:application/pdf;base64,JVBERi0xLjQKJcfsj6IKNSAwIG9iago8PAovTGVuZ3RoIDYgMCBSCi9GaWx0ZXIgL0ZsYXRlRGVjb2RlCj4+CnN0cmVhbQp4nDdwQrGdwwQAAP//ABCDAQplbmRzdHJlYW0KZW5kb2JqCgo2IDAgb2JqCjI2CmVuZG9iagoKMyAwIG9iago8PAovVHlwZSAvUGFnZQovUGFyZW50IDEgMCBSCi9SZXNvdXJjZXMgMiAwIFIKL0NvbnRlbnRzIDUgMCBSCj4+CmVuZG9iagoKMSAwIG9iago8PAovVHlwZSAvUGFnZXMKL0tpZHMgWzMgMCBSXQovQ291bnQgMQovTWVkaWFCb3ggWzAgMCA1OTUgODQyXQo+PgplbmRvYmoKCjQgMCBvYmoKPDwKL1R5cGUgL0NhdGFsb2cKL1BhZ2VzIDEgMCBSCj4+CmVuZG9iagoKMiAwIG9iago8PAovUHJvY1NldCBbL1BERiAvVGV4dF0KL0ZvbnQgPDwKL0YxIDcgMCBSCj4+Cj4+CmVuZG9iagoKNyAwIG9iago8PAovVHlwZSAvRm9udAovU3VidHlwZSAvVHlwZTEKL0Jhc2VGb250IC9IZWx2ZXRpY2EKPj4KZW5kb2JqCgp4cmVmCjAgOAowMDAwMDAwMDAwIDY1NTM1IGYKMDAwMDAwMDAwOSAwMDAwMCBuCjAwMDAwMDAwNzQgMDAwMDAgbgowMDAwMDAwMTIwIDAwMDAwIG4KMDAwMDAwMDE3OSAwMDAwMCBuCjAwMDAwMDAyMDQgMDAwMDAgbgowMDAwMDAwMzAxIDAwMDAwIG4KMDAwMDAwMDMxOCAwMDAwMCBuCnRyYWlsZXIKPDwKL1NpemUgOAovUm9vdCA0IDAgUgo+PgpzdGFydHhyZWYKMzY1CiUlRU9G",
+#     "timeSlots": ["08:00", "10:00", "13:00", "15:00", "17:00"]
+# }
+
+# ### 4. Submit Service with License (Image Document - JPEG)
+# POST {{baseUrl}}/services/submit
+# Authorization: Bearer {{serviceProviderToken}}
+# Content-Type: application/json
+
+# {
+#     "name": "Veterinary Care Services",
+#     "price": 350000,
+#     "description": "Licensed veterinary care including check-ups, vaccinations, and minor treatments",
+#     "duration": "1 hour",
+#     "typeid": 3,
+#     "license": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k=",
+#     "timeSlots": ["09:00", "11:00", "14:00", "16:00"]
+# }
+
+# ### 5. Submit Service WITHOUT License (Should work but license will be null)
+# POST {{baseUrl}}/services
+# Authorization: Bearer {{serviceProviderToken}}
+# Content-Type: application/json
+
+# {
+#     "name": "Basic Pet Walking Service",
+#     "price": 50000,
+#     "description": "Simple dog walking service for busy pet owners",
+#     "duration": "30 minutes",
+#     "typeid": 1,
+#     "timeSlots": ["07:00", "18:00", "19:00"]
+# }
+
+# # ===================================================================
+# # MANAGER REVIEW WITH LICENSE VISIBILITY TESTS
+# # ===================================================================
+
+# ### 6. Get All Pending Services for Review (Manager) - Should show license
+# GET {{baseUrl}}/services/pending-review
+# Authorization: Bearer {{managerToken}}
+
+# ### 7. Get Service Provider's Services (Should show license to provider)
+# GET {{baseUrl}}/services/my-services
+# Authorization: Bearer {{serviceProviderToken}}
+
+# ### 7.5. Get Complete Service Details for Manager Review (Manager Only)
+# GET {{baseUrl}}/services/1/manager-details
+# Authorization: Bearer {{managerToken}}
+
+# ### 8. Get Service Provider's Pending Services Only
+# GET {{baseUrl}}/services/my-services?status=pending
+# Authorization: Bearer {{serviceProviderToken}}
+
+# # ===================================================================
+# # SERVICE APPROVAL TESTS
+# # ===================================================================
+
+# ### 9. Approve Service with License
+# POST {{baseUrl}}/services/1/review
+# Authorization: Bearer {{managerToken}}
+# Content-Type: application/json
+
+# {
+#     "action": "approve"
+# }
+
+# ### 10. Reject Service (Example)
+# POST {{baseUrl}}/services/2/review
+# Authorization: Bearer {{managerToken}}
+# Content-Type: application/json
+
+# {
+#     "action": "reject",
+#     "rejectionReason": "License document is not clear enough. Please resubmit with higher quality scan."
+# }
+
+# # ===================================================================
+# # ERROR HANDLING TESTS
+# # ===================================================================
+
+# ### 11. Submit Service with Invalid License Format (Should fail)
+# POST {{baseUrl}}/services
+# Authorization: Bearer {{serviceProviderToken}}
+# Content-Type: application/json
+
+# {
+#     "name": "Invalid License Test",
+#     "price": 100000,
+#     "description": "Testing invalid license format",
+#     "duration": "1 hour",
+#     "typeid": 1,
+#     "license": "invalid-base64-format",
+#     "timeSlots": ["10:00"]
+# }
+
+# ### 12. Submit Service with Non-PDF/Image License (Should fail)
+# POST {{baseUrl}}/services
+# Authorization: Bearer {{serviceProviderToken}}
+# Content-Type: application/json
+
+# {
+#     "name": "Wrong File Type Test",
+#     "price": 100000,
+#     "description": "Testing wrong file type for license",
+#     "duration": "1 hour",
+#     "typeid": 1,
+#     "license": "data:text/plain;base64,dGhpcyBpcyBhIHRleHQgZmlsZQ==",
+#     "timeSlots": ["10:00"]
+# }
+
+# # ===================================================================
+# # EXPECTED RESPONSES
+# # ===================================================================
+
+# ### Expected Response for Service Submission with License:
+# # {
+# #   "message": "Service created successfully",
+# #   "service": {
+# #     "serviceid": 1,
+# #     "name": "Professional Pet Grooming with License",
+# #     "price": 200000,
+# #     "description": "Premium grooming service with certified professional license and insurance coverage",
+# #     "duration": "2.5 hours",
+# #     "service_type": "Pet Grooming",
+# #     "provider_name": "Premium Pet Care",
+# #     "timeSlots": ["08:00", "10:00", "13:00", "15:00", "17:00"]
+# #   }
+# # }
+
+# ### Expected Response for Manager Pending Services Review:
+# # {
+# #   "message": "Pending services retrieved successfully",
+# #   "services": [
+# #     {
+# #       "serviceid": 1,
+# #       "name": "Professional Pet Grooming with License",
+# #       "price": 200000,
+# #       "description": "Premium grooming service with certified professional license and insurance coverage",
+# #       "duration": "2.5 hours",
+# #       "license": "data:application/pdf;base64,JVBERi0xLjQKJcfsj6IK...",
+# #       "status": "pending",
+# #       "submission_date": "2024-12-19 10:30:00",
+# #       "service_type": "Pet Grooming",
+# #       "provider_name": "Premium Pet Care",
+# #       "provider_contact_name": "Pet Grooming Service",
+# #       "provider_email": "service.provider@example.com",
+# #       "timeSlots": ["08:00", "10:00", "13:00", "15:00", "17:00"]
+# #     }
+# #   ],
+# #   "count": 1
+# # }
+
+# ### Expected Response for Service Provider's Services:
+# # {
+# #   "message": "Services retrieved successfully",
+# #   "services": [
+# #     {
+# #       "serviceid": 1,
+# #       "name": "Professional Pet Grooming with License",
+# #       "price": 200000,
+# #       "description": "Premium grooming service with certified professional license and insurance coverage",
+# #       "duration": "2.5 hours",
+# #       "license": "data:application/pdf;base64,JVBERi0xLjQKJcfsj6IK...",
+# #       "status": "pending",
+# #       "submission_date": "2024-12-19 10:30:00",
+# #       "review_date": null,
+# #       "rejection_reason": null,
+# #       "service_type": "Pet Grooming",
+# #       "reviewed_by_name": null,
+# #       "timeSlots": ["08:00", "10:00", "13:00", "15:00", "17:00"]
+# #     }
+# #   ],
+# #   "statistics": {
+# #     "total": 1,
+# #     "pending": 1,
+# #     "approved": 0,
+# #     "rejected": 0
+# #   }
+# # }

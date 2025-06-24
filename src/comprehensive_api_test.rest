@@ -473,7 +473,7 @@ GET {{baseUrl}}/services/{{serviceId}}
 ### 62. Get Service Details with Timeslots
 GET {{baseUrl}}/services/{{serviceId}}/details
 
-### 63. Submit New Service (Service Provider)
+### 63. Submit New Service with Existing Type ID (Service Provider)
 POST {{baseUrl}}/services
 Authorization: Bearer {{serviceProviderToken}}
 Content-Type: application/json
@@ -484,7 +484,23 @@ Content-Type: application/json
     "description": "Full grooming service including bath, nail trim, and styling",
     "duration": "2 hours",
     "typeid": 1,
+    "license": "data:application/pdf;base64,JVBERi0xLjQKJcfsj6IKNSAwIG9iago8PAovTGVuZ3RoIDYgMCBSCi9GaWx0ZXIgL0ZsYXRlRGVjb2RlCj4+CnN0cmVhbQp4nDdwQrGdwwQAAP//ABCDAQplbmRzdHJlYW0KZW5kb2JqCgo2IDAgb2JqCjI2CmVuZG9iagoKMyAwIG9iago8PAovVHlwZSAvUGFnZQovUGFyZW50IDEgMCBSCi9SZXNvdXJjZXMgMiAwIFIKL0NvbnRlbnRzIDUgMCBSCj4+CmVuZG9iagoKMSAwIG9iago8PAovVHlwZSAvUGFnZXMKL0tpZHMgWzMgMCBSXQovQ291bnQgMQo=",
     "timeSlots": ["09:00", "11:00", "14:00", "16:00"]
+}
+
+### 63b. Submit New Service with New Service Type (Service Provider)
+POST {{baseUrl}}/services
+Authorization: Bearer {{serviceProviderToken}}
+Content-Type: application/json
+
+{
+    "name": "Mobile Pet Grooming",
+    "price": 200000,
+    "description": "Professional mobile grooming service that comes to your location",
+    "duration": "1.5 hours",
+    "serviceType": "Mobile Grooming",
+    "license": "data:application/pdf;base64,JVBERi0xLjQKJcfsj6IKNSAwIG9iago8PAovTGVuZ3RoIDYgMCBSCi9GaWx0ZXIgL0ZsYXRlRGVjb2RlCj4+CnN0cmVhbQp4nDdwQrGdwwQAAP//ABCDAQplbmRzdHJlYW0KZW5kb2JqCgo2IDAgb2JqCjI2CmVuZG9iagoKMyAwIG9iago8PAovVHlwZSAvUGFnZQovUGFyZW50IDEgMCBSCi9SZXNvdXJjZXMgMiAwIFIKL0NvbnRlbnRzIDUgMCBSCj4+CmVuZG9iagoKMSAwIG9iago8PAovVHlwZSAvUGFnZXMKL0tpZHMgWzMgMCBSXQovQ291bnQgMQo=",
+    "timeSlots": ["10:00", "12:00", "15:00", "17:00"]
 }
 
 ### 64. Get My Services (Service Provider)

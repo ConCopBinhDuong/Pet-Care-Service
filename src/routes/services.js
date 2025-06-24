@@ -6,15 +6,15 @@ import notificationService from '../services/notificationService.js';
 
 const router = express.Router();
 
-//initialize service types (Manager only)
+//initialize service types (Service Provider only)
 router.post('/initialize', authMiddleware, async (req, res) => {
     try {
         const userRole = req.user.role;
         
-        // Only manager can initialize service types
-        if (userRole !== 'Manager') {
+        // Only service providers can initialize service types
+        if (userRole !== 'Service provider') {
             return res.status(403).json({
-                message: 'Access denied. Manager only.'
+                message: 'Access denied. Service providers only.'
             });
         }
 
@@ -100,9 +100,56 @@ router.post('/', authMiddleware, validateServiceSubmission, (req, res) => {
             price, 
             description, 
             duration, 
-            typeid, 
+            typeid,
+            serviceType, 
+            license,
             timeSlots 
         } = req.body;
+
+        let finalTypeId = typeid;
+        
+        // Handle service type creation or validation
+        if (serviceType) {
+            // Create new service type (service providers only)
+            const insertTypeStmt = db.prepare(`
+                INSERT INTO servicetype (type) VALUES (?)
+            `);
+            
+            try {
+                const typeResult = insertTypeStmt.run(serviceType.trim());
+                finalTypeId = typeResult.lastInsertRowid;
+            } catch (error) {
+                // Handle duplicate service type
+                if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+                    // Get existing type ID
+                    const getTypeStmt = db.prepare(`
+                        SELECT typeid FROM servicetype WHERE type = ?
+                    `);
+                    const existingType = getTypeStmt.get(serviceType.trim());
+                    if (existingType) {
+                        finalTypeId = existingType.typeid;
+                    } else {
+                        return res.status(400).json({
+                            message: 'Unable to create or find service type'
+                        });
+                    }
+                } else {
+                    throw error;
+                }
+            }
+        } else if (typeid) {
+            // Verify existing service type exists
+            const checkTypeStmt = db.prepare(`
+                SELECT typeid FROM servicetype WHERE typeid = ?
+            `);
+            const serviceTypeRecord = checkTypeStmt.get(typeid);
+            
+            if (!serviceTypeRecord) {
+                return res.status(400).json({
+                    message: 'Invalid service type ID'
+                });
+            }
+        }
 
         // Start transaction
         db.exec('BEGIN TRANSACTION');
@@ -110,8 +157,8 @@ router.post('/', authMiddleware, validateServiceSubmission, (req, res) => {
         try {
             // Insert service
             const insertServiceStmt = db.prepare(`
-                INSERT INTO service (name, price, description, duration, typeid, providerid)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO service (name, price, description, duration, license, typeid, providerid)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             `);
 
             const result = insertServiceStmt.run(
@@ -119,7 +166,8 @@ router.post('/', authMiddleware, validateServiceSubmission, (req, res) => {
                 price,
                 description || null,
                 duration,
-                typeid,
+                license || null,
+                finalTypeId,
                 userId
             );
 
@@ -436,7 +484,7 @@ router.post('/submit', authMiddleware, validateServiceSubmission, (req, res) => 
             });
         }
 
-        const { name, price, description, duration, typeid, timeSlots } = req.body;
+        const { name, price, description, duration, typeid, serviceType, license, timeSlots } = req.body;
         const providerId = req.user.userid;
 
         // Verify service provider exists
@@ -451,22 +499,55 @@ router.post('/submit', authMiddleware, validateServiceSubmission, (req, res) => 
             });
         }
 
-        // Verify service type exists
-        const checkTypeStmt = db.prepare(`
-            SELECT typeid FROM servicetype WHERE typeid = ?
-        `);
-        const serviceType = checkTypeStmt.get(typeid);
+        let finalTypeId = typeid;
         
-        if (!serviceType) {
-            return res.status(400).json({
-                message: 'Invalid service type ID'
-            });
+        // Handle service type creation or validation
+        if (serviceType) {
+            // Create new service type (service providers only)
+            const insertTypeStmt = db.prepare(`
+                INSERT INTO servicetype (type) VALUES (?)
+            `);
+            
+            try {
+                const typeResult = insertTypeStmt.run(serviceType.trim());
+                finalTypeId = typeResult.lastInsertRowid;
+            } catch (error) {
+                // Handle duplicate service type
+                if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+                    // Get existing type ID
+                    const getTypeStmt = db.prepare(`
+                        SELECT typeid FROM servicetype WHERE type = ?
+                    `);
+                    const existingType = getTypeStmt.get(serviceType.trim());
+                    if (existingType) {
+                        finalTypeId = existingType.typeid;
+                    } else {
+                        return res.status(400).json({
+                            message: 'Unable to create or find service type'
+                        });
+                    }
+                } else {
+                    throw error;
+                }
+            }
+        } else if (typeid) {
+            // Verify existing service type exists
+            const checkTypeStmt = db.prepare(`
+                SELECT typeid FROM servicetype WHERE typeid = ?
+            `);
+            const serviceTypeRecord = checkTypeStmt.get(typeid);
+            
+            if (!serviceTypeRecord) {
+                return res.status(400).json({
+                    message: 'Invalid service type ID'
+                });
+            }
         }
 
         // Insert the service with pending status
         const insertServiceStmt = db.prepare(`
-            INSERT INTO service (name, price, description, duration, typeid, providerid, status)
-            VALUES (?, ?, ?, ?, ?, ?, 'pending')
+            INSERT INTO service (name, price, description, duration, license, typeid, providerid, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
         `);
         
         const serviceResult = insertServiceStmt.run(
@@ -474,7 +555,8 @@ router.post('/submit', authMiddleware, validateServiceSubmission, (req, res) => 
             price,
             description.trim(),
             duration.trim(),
-            typeid,
+            license || null,
+            finalTypeId,
             providerId
         );
 
@@ -547,6 +629,7 @@ router.get('/my-services', authMiddleware, (req, res) => {
                 s.price,
                 s.description,
                 s.duration,
+                s.license,
                 s.status,
                 s.submission_date,
                 s.review_date,
@@ -629,6 +712,7 @@ router.get('/pending-review', authMiddleware, (req, res) => {
                 s.price,
                 s.description,
                 s.duration,
+                s.license,
                 s.status,
                 s.submission_date,
                 st.type as service_type,
@@ -1267,6 +1351,85 @@ router.post('/:id/review', authMiddleware, validateServiceApproval, (req, res) =
         console.error('Error reviewing service:', error);
         res.status(500).json({
             message: 'Internal server error while reviewing service'
+        });
+    }
+});
+
+/**
+ * Get complete service details for managers (includes license)
+ * GET /api/services/:serviceid/manager-details
+ * Role: Manager only
+ */
+router.get('/:serviceid/manager-details', authMiddleware, (req, res) => {
+    try {
+        // Check if user is a manager
+        if (req.user.role !== 'Manager') {
+            return res.status(403).json({
+                message: 'Access denied. Only managers can access detailed service information.'
+            });
+        }
+
+        const { serviceid } = req.params;
+
+        // Get complete service details including license
+        const getServiceStmt = db.prepare(`
+            SELECT 
+                s.serviceid,
+                s.name,
+                s.price,
+                s.description,
+                s.duration,
+                s.license,
+                s.status,
+                s.submission_date,
+                s.review_date,
+                s.rejection_reason,
+                st.type as service_type,
+                sp.business_name as provider_name,
+                u.name as provider_contact_name,
+                u.email as provider_email,
+                u.gender as provider_gender,
+                sp.phone as provider_phone,
+                sp.address as provider_address,
+                sp.website as provider_website,
+                CASE 
+                    WHEN s.reviewed_by IS NOT NULL THEN mu.name 
+                    ELSE NULL 
+                END as reviewed_by_name
+            FROM service s
+            JOIN servicetype st ON s.typeid = st.typeid
+            JOIN serviceprovider sp ON s.providerid = sp.id
+            JOIN users u ON sp.id = u.userid
+            LEFT JOIN manager m ON s.reviewed_by = m.id
+            LEFT JOIN users mu ON m.id = mu.userid
+            WHERE s.serviceid = ?
+        `);
+
+        const service = getServiceStmt.get(serviceid);
+
+        if (!service) {
+            return res.status(404).json({
+                message: 'Service not found'
+            });
+        }
+
+        // Get time slots for this service
+        const getTimeSlotsStmt = db.prepare(`
+            SELECT slot FROM timeslot WHERE serviceid = ? ORDER BY slot
+        `);
+
+        const timeSlots = getTimeSlotsStmt.all(serviceid);
+        service.timeSlots = timeSlots.map(ts => ts.slot);
+
+        res.status(200).json({
+            message: 'Complete service details retrieved successfully',
+            service: service
+        });
+
+    } catch (error) {
+        console.error('Error retrieving complete service details:', error);
+        res.status(500).json({
+            message: 'Internal server error while retrieving service details'
         });
     }
 });
