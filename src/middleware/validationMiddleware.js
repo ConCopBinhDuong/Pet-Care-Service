@@ -975,7 +975,6 @@ export const validateScheduleUpdate = (req, res, next) => {
     next();
 };
 
-<<<<<<< HEAD
 /**
  * Validate review creation data
  */
@@ -1443,18 +1442,29 @@ export const validateChatMessage = (req, res, next) => {
 
     // Image validation (if provided)
     if (image) {
-        if (typeof image !== 'string') {
-            errors.push('Image must be provided as base64 string');
-        } else {
-            // Basic base64 validation
-            const base64Pattern = /^[A-Za-z0-9+\/]*={0,2}$/;
-            if (!base64Pattern.test(image)) {
-                errors.push('Invalid base64 image format');
-            } else if (image.length > 5000000) { // ~3.7MB limit for base64
-                errors.push('Image size too large (max ~3.7MB)');
+                if (typeof image !== 'string') {
+                    errors.push('Image must be provided as base64 string');
+                } else {
+                    // Basic base64 validation
+                    const base64Pattern = /^[A-Za-z0-9+\/]*={0,2}$/;
+                    if (!base64Pattern.test(image)) {
+                        errors.push('Invalid base64 image format');
+                    } else if (image.length > 5000000) { // ~3.7MB limit for base64
+                        errors.push('Image size too large (max ~3.7MB)');
+                    }
+                }
             }
-        }
-=======
+        
+            if (errors.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Validation failed',
+                    details: errors
+                });
+            }
+        
+            next();
+        };
 
 
 /**
@@ -1467,7 +1477,6 @@ export const validateTicketReply = (req, res, next) => {
     // Validate that the response is provided and is a non-empty string
     if (!response || typeof response !== 'string' || response.trim().length === 0) {
         errors.push('Response is required and must be a non-empty string');
->>>>>>> Hien
     }
 
     if (errors.length > 0) {
