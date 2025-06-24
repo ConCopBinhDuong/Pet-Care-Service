@@ -92,19 +92,6 @@ router.post('/:ticketId/close', async (req, res) => {
             return res.status(400).json({ message: 'Only tickets in "solving" status can be closed.' });
         }
 
-        // Generate a PDF of the ticket response
-        const pdfDoc = await PDFDocument.create();
-        const page = pdfDoc.addPage();
-        const { width, height } = page.getSize();
-        const fontSize = 12;
-
-        page.drawText(`Ticket ID: ${ticket.ticketid}`, { x: 50, y: height - 50, size: fontSize });
-        page.drawText(`Response: ${ticket.respone}`, { x: 50, y: height - 70, size: fontSize });
-        page.drawText(`Status: Closed`, { x: 50, y: height - 90, size: fontSize });
-
-        const pdfBytes = await pdfDoc.save();
-        const pdfPath = path.join(__dirname, `ticket_${ticketId}_response.pdf`);
-        fs.writeFileSync(pdfPath, pdfBytes);
 
         // Archive the ticket
         const archiveTicketStmt = db.prepare(`
@@ -117,10 +104,32 @@ router.post('/:ticketId/close', async (req, res) => {
         res.status(200).json({
             message: 'Ticket closed successfully',
             ticketId: ticketId,
-            pdfPath: pdfPath
+            status: 'closed'
         });
     } catch (err) {
         console.error('Close ticket error:', err.message);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+// Get all archived tickets for the authenticated user
+router.get('/archived', (req, res) => {
+    try {
+        const userId = req.userId; // Assuming user's ID is set in req.userId
+
+        // Fetch archived tickets where the user is the owner
+        const getArchivedTicketsStmt = db.prepare(`
+            SELECT ticketid, subject, description, status, respone, created_at, closed_at
+            FROM ticket
+            WHERE userid = ? AND archived = 1
+            ORDER BY closed_at DESC
+        `);
+        const archivedTickets = getArchivedTicketsStmt.all(userId);
+
+        res.status(200).json({
+            archivedTickets
+        });
+    } catch (err) {
+        console.error('Get archived tickets error:', err.message);
         res.status(500).json({ message: 'Internal server error' });
     }
 });
