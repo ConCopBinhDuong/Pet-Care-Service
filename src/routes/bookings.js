@@ -879,7 +879,7 @@ router.post('/provider/auto-reject-expired', async (req, res) => {
             JOIN user u ON po.id = u.userid
             WHERE s.providerid = ? 
             AND b.status = 'pending'
-            AND datetime(b.book_timestamp, '+24 hours') <= datetime('now')
+            AND DATE_ADD(b.book_timestamp, INTERVAL 24 HOUR) <= NOW()
         `, [userId]);
 
         if (expiredBookings.length === 0) {

@@ -218,7 +218,7 @@ class NotificationService {
                 JOIN service s ON b.svid = s.serviceid
                 JOIN serviceprovider sp ON s.providerid = sp.id
                 WHERE b.status = 'pending'
-                AND datetime(b.book_timestamp, '+24 hours') <= datetime('now')
+                AND DATE_ADD(b.book_timestamp, INTERVAL 24 HOUR) <= NOW()
             `);
 
             for (const booking of expiredBookings) {
@@ -450,7 +450,7 @@ class NotificationService {
         try {
             const result = await this.db.execute(`
                 DELETE FROM notification 
-                WHERE datetime(created_at) < datetime('now', '-30 days')
+                WHERE created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)
             `);
             
             return { 
