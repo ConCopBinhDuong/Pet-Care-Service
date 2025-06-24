@@ -975,6 +975,7 @@ export const validateScheduleUpdate = (req, res, next) => {
     next();
 };
 
+<<<<<<< HEAD
 /**
  * Validate review creation data
  */
@@ -1453,6 +1454,20 @@ export const validateChatMessage = (req, res, next) => {
                 errors.push('Image size too large (max ~3.7MB)');
             }
         }
+=======
+
+
+/**
+ * Validate ticket reply data
+ */
+export const validateTicketReply = (req, res, next) => {
+    const { response } = req.body;
+    const errors = [];
+
+    // Validate that the response is provided and is a non-empty string
+    if (!response || typeof response !== 'string' || response.trim().length === 0) {
+        errors.push('Response is required and must be a non-empty string');
+>>>>>>> Hien
     }
 
     if (errors.length > 0) {
