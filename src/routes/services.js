@@ -1297,15 +1297,13 @@ router.post('/:id/review', authMiddleware, validateServiceApproval, (req, res) =
                 notificationService.notifyServiceApproved(
                     serviceId,
                     service.providerid,
-                    service.name,
-                    req.user.name
+                    service.name
                 );
             } else if (newStatus === 'rejected') {
                 notificationService.notifyServiceRejected(
                     serviceId,
                     service.providerid,
                     service.name,
-                    req.user.name,
                     rejectionReason.trim()
                 );
             }

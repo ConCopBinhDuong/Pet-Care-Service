@@ -685,6 +685,7 @@ router.post('/provider/requests/:bookingId/accept', (req, res) => {
             SELECT 
                 b.bookid, b.svid, b.poid, b.slot, b.servedate, b.status, b.book_timestamp,
                 s.name as service_name, s.providerid,
+                s.business_name as provider_name,
                 u.name as customer_name, u.email as customer_email
             FROM booking b
             JOIN service s ON b.svid = s.serviceid

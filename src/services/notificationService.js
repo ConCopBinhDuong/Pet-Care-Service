@@ -29,16 +29,16 @@ class NotificationService {
     /**
      * Notify service provider when their service is approved
      */
-    notifyServiceApproved(serviceId, providerId, serviceName, reviewerName) {
-        const text = `Great news! Your service "${serviceName}" has been approved by ${reviewerName} and is now live for bookings.`;
+    notifyServiceApproved(serviceId, providerId, serviceName,) {
+        const text = `Great news! Your service "${serviceName}" has been approved and is now live for bookings.`;
         return this.createNotification(providerId, text, 'service_approved', null, serviceId);
     }
 
     /**
      * Notify service provider when their service is rejected
      */
-    notifyServiceRejected(serviceId, providerId, serviceName, reviewerName, rejectionReason) {
-        const text = `Your service "${serviceName}" has been rejected by ${reviewerName}. Reason: ${rejectionReason}`;
+    notifyServiceRejected(serviceId, providerId, serviceName, rejectionReason) {
+        const text = `Your service "${serviceName}" has been rejected. Reason: ${rejectionReason}`;
         return this.createNotification(providerId, text, 'service_rejected', null, serviceId);
     }
 
