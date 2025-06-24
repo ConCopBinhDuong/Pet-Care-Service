@@ -65,6 +65,17 @@ db.exec(`
     FOREIGN KEY(managerid) REFERENCES manager(id) ON UPDATE CASCADE ON DELETE CASCADE
   );
 `);
+db.exec(`
+    CREATE TABLE ticketreply (
+    replyid INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticketid INTEGER,
+    userid INTEGER,
+    role TEXT,
+    message TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(ticketid) REFERENCES ticket(ticketid) ON DELETE CASCADE,
+    FOREIGN KEY(userid) REFERENCES users(userid) ON DELETE CASCADE)
+`);
 
 db.exec(`
   CREATE TABLE thread (
