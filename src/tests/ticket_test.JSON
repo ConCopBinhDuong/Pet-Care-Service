@@ -1,0 +1,347 @@
+{
+  "info": {
+    "name": "Pet Care Service - Ticket API Tests",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Reply",
+      "item": [
+        {
+          "name": "Manager replies to pending ticket (success)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{managerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/ticket/201/reply",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"response\": \"We are looking into your issue.\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Ticket replied successfully\", function () { pm.expect(pm.response.json().message).to.include('Ticket replied successfully'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Non-manager tries to reply (forbidden)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/ticket/201/reply",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"response\": \"I want to reply as a pet owner.\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Access denied\", function () { pm.expect(pm.response.json().message).to.include('Access denied'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reply to non-existent ticket (not found)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{managerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/ticket/99999/reply",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"response\": \"Trying to reply to a non-existent ticket.\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Ticket not found\", function () { pm.expect(pm.response.json().message).to.include('Ticket not found'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reply to non-pending ticket (bad request)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{managerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/ticket/202/reply",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"response\": \"Trying to reply to a closed ticket.\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Only pending tickets\", function () { pm.expect(pm.response.json().message).to.include('Only pending tickets'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Close",
+      "item": [
+        {
+          "name": "Manager closes solving ticket (success)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{managerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/ticket/203/close"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Ticket closed successfully\", function () { pm.expect(pm.response.json().message).to.include('Ticket closed successfully'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Non-manager tries to close ticket (forbidden)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/ticket/203/close"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Access denied\", function () { pm.expect(pm.response.json().message).to.include('Access denied'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Close non-existent ticket (not found)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{managerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/ticket/99999/close"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Ticket not found\", function () { pm.expect(pm.response.json().message).to.include('Ticket not found'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Close ticket not in solving status (bad request)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{managerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/ticket/204/close"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Only tickets in 'solving' status\", function () { pm.expect(pm.response.json().message).to.include('Only tickets in \"solving\" status'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Archived",
+      "item": [
+        {
+          "name": "Get archived tickets (success)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/ticket/archived"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Archived tickets array exists\", function () { pm.expect(pm.response.json().archivedTickets).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Open",
+      "item": [
+        {
+          "name": "Pet owner opens ticket for booking (success)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/ticket/booking/301/open",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"subject\": \"Service Issue\", \"description\": \"My pet was not picked up on time.\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Ticket opened successfully\", function () { pm.expect(pm.response.json().message).to.include('Ticket opened successfully'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Service provider opens ticket for booking (success)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{serviceProviderToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/ticket/booking/302/open",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"subject\": \"Customer No Show\", \"description\": \"The pet owner did not arrive.\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Ticket opened successfully\", function () { pm.expect(pm.response.json().message).to.include('Ticket opened successfully'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Open ticket with invalid booking (not found)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/ticket/booking/99999/open",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"subject\": \"Invalid\", \"description\": \"Booking does not exist.\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Booking not found\", function () { pm.expect(pm.response.json().message).to.include('Booking not found'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Open ticket with missing fields (bad request)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{petOwnerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/ticket/booking/301/open",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"subject\": \"\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Missing or invalid booking ID, subject, or description\", function () { pm.expect(pm.response.json().message).to.include('Missing or invalid booking ID'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "https://localhost:8443", "type": "string" },
+    { "key": "managerToken", "value": "", "type": "string" },
+    { "key": "petOwnerToken", "value": "", "type": "string" },
+    { "key": "serviceProviderToken", "value": "", "type": "string" }
+  ]
+}
