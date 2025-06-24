@@ -1,19 +1,18 @@
 import express from 'express'
-import db from '../Database_sqlite.js'
+import db from '../db.js'
 import { validateProfileUpdate } from '../middleware/validationMiddleware.js'
 
 const router = express.Router();
 
 // Get current user profile (protected route)
 // Note: authMiddleware is applied at the router level in server.js
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
 
         // Get basic user info
-        const getUserStmt = db.prepare(`SELECT userid, name, email, gender, role FROM users WHERE userid = ?`);
-        const user = getUserStmt.get(userId);
+        const user = await db.get(`SELECT userid, name, email, gender, role FROM user WHERE userid = ?`, [userId]);
 
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
@@ -29,8 +28,7 @@ router.get('/', (req, res) => {
 
         // Fetch role-specific data
         if (userRole === 'Pet owner') {
-            const getPetOwnerStmt = db.prepare(`SELECT phone, city, address FROM petowner WHERE id = ?`);
-            const petOwnerData = getPetOwnerStmt.get(userId);
+            const petOwnerData = await db.get(`SELECT phone, city, address FROM petowner WHERE id = ?`, [userId]);
             
             if (petOwnerData) {
                 profileData.phone = petOwnerData.phone;
@@ -39,11 +37,10 @@ router.get('/', (req, res) => {
             }
 
         } else if (userRole === 'Service provider') {
-            const getServiceProviderStmt = db.prepare(`
+            const serviceProviderData = await db.get(`
                 SELECT business_name, logo, phone, description, address, website 
                 FROM serviceprovider WHERE id = ?
-            `);
-            const serviceProviderData = getServiceProviderStmt.get(userId);
+            `, [userId]);
             
             if (serviceProviderData) {
                 profileData.businessName = serviceProviderData.business_name;
@@ -75,7 +72,7 @@ router.get('/', (req, res) => {
  * GET /api/profile/provider/:providerId
  * Role: Pet owner, Manager (Service providers can only view their own profile via the main route)
  */
-router.get('/provider/:providerId', (req, res) => {
+router.get('/provider/:providerId', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -90,10 +87,8 @@ router.get('/provider/:providerId', (req, res) => {
             return res.status(403).json({ 
                 message: 'Access denied. Only pet owners and managers can view service provider profiles.' 
             });
-        }
-
-        // Get service provider profile information
-        const getProviderProfileStmt = db.prepare(`
+        }        // Get service provider profile information
+        const providerProfile = await db.get(`
             SELECT 
                 u.userid,
                 u.name,
@@ -107,19 +102,17 @@ router.get('/provider/:providerId', (req, res) => {
                 sp.description,
                 sp.address,
                 sp.website
-            FROM users u
+            FROM user u
             JOIN serviceprovider sp ON u.userid = sp.id
             WHERE u.userid = ? AND u.role = 'Service provider'
-        `);
-
-        const providerProfile = getProviderProfileStmt.get(providerId);
+        `, [providerId]);
 
         if (!providerProfile) {
             return res.status(404).json({ message: 'Service provider not found' });
         }
 
         // Get service statistics for this provider
-        const getServiceStatsStmt = db.prepare(`
+        const serviceStats = await db.get(`
             SELECT 
                 COUNT(*) as total_services,
                 SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_services,
@@ -127,12 +120,10 @@ router.get('/provider/:providerId', (req, res) => {
                 SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected_services
             FROM service 
             WHERE providerid = ?
-        `);
-
-        const serviceStats = getServiceStatsStmt.get(providerId);
+        `, [providerId]);
 
         // Get average rating from reviews
-        const getAverageRatingStmt = db.prepare(`
+        const ratingInfo = await db.get(`
             SELECT 
                 COUNT(*) as total_reviews,
                 ROUND(AVG(CAST(sr.stars AS REAL)), 2) as average_rating
@@ -140,12 +131,10 @@ router.get('/provider/:providerId', (req, res) => {
             JOIN booking b ON sr.bookid = b.bookid
             JOIN service s ON b.svid = s.serviceid
             WHERE s.providerid = ?
-        `);
-
-        const ratingInfo = getAverageRatingStmt.get(providerId);
+        `, [providerId]);
 
         // Get recent reviews (last 5)
-        const getRecentReviewsStmt = db.prepare(`
+        const recentReviews = await db.all(`
             SELECT 
                 sr.stars,
                 sr.comment,
@@ -155,16 +144,14 @@ router.get('/provider/:providerId', (req, res) => {
             FROM service_review sr
             JOIN booking b ON sr.bookid = b.bookid
             JOIN service s ON b.svid = s.serviceid
-            JOIN users u ON b.poid = u.userid
+            JOIN user u ON b.poid = u.userid
             WHERE s.providerid = ?
             ORDER BY b.servedate DESC
             LIMIT 5
-        `);
-
-        const recentReviews = getRecentReviewsStmt.all(providerId);
+        `, [providerId]);
 
         // Get approved services offered by this provider
-        const getServicesStmt = db.prepare(`
+        const services = await db.all(`
             SELECT 
                 s.serviceid,
                 s.name,
@@ -176,9 +163,7 @@ router.get('/provider/:providerId', (req, res) => {
             JOIN servicetype st ON s.typeid = st.typeid
             WHERE s.providerid = ? AND s.status = 'approved'
             ORDER BY s.name
-        `);
-
-        const services = getServicesStmt.all(providerId);
+        `, [providerId]);
 
         // Format the response
         const profileData = {
@@ -226,7 +211,7 @@ router.get('/provider/:providerId', (req, res) => {
  * GET /api/profile/providers
  * Role: Pet owner, Manager
  */
-router.get('/providers', (req, res) => {
+router.get('/providers', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -260,7 +245,7 @@ router.get('/providers', (req, res) => {
                 COUNT(DISTINCT CASE WHEN s.status = 'approved' THEN s.serviceid END) as approved_service_count,
                 COUNT(DISTINCT sr.bookid) as total_reviews,
                 ROUND(AVG(CAST(sr.stars AS REAL)), 2) as average_rating
-            FROM users u
+            FROM user u
             JOIN serviceprovider sp ON u.userid = sp.id
             LEFT JOIN service s ON sp.id = s.providerid
             LEFT JOIN booking b ON s.serviceid = b.svid
@@ -317,8 +302,7 @@ router.get('/providers', (req, res) => {
 
         query += ` ORDER BY average_rating DESC, approved_service_count DESC, sp.business_name ASC`;
 
-        const getProvidersStmt = db.prepare(query);
-        const providers = getProvidersStmt.all(...params);
+        const providers = await db.all(query, params);
 
         res.status(200).json({
             message: 'Service providers retrieved successfully',
@@ -344,14 +328,14 @@ router.get('/providers', (req, res) => {
 });
 
 // Update user profile (protected route)
-router.put('/', validateProfileUpdate, (req, res) => {
+router.put('/', validateProfileUpdate, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
         const updates = req.body;
 
         // Start transaction
-        db.exec('BEGIN TRANSACTION');
+        await db.beginTransaction();
 
         // Update basic user info if provided
         const allowedUserFields = ['name', 'gender'];
@@ -367,8 +351,7 @@ router.put('/', validateProfileUpdate, (req, res) => {
             const setClause = Object.keys(userUpdates).map(key => `${key} = ?`).join(', ');
             const values = Object.values(userUpdates);
             
-            const updateUserStmt = db.prepare(`UPDATE users SET ${setClause} WHERE userid = ?`);
-            updateUserStmt.run(...values, userId);
+            await db.execute(`UPDATE user SET ${setClause} WHERE userid = ?`, [...values, userId]);
         }
 
         // Update role-specific data
@@ -386,8 +369,7 @@ router.put('/', validateProfileUpdate, (req, res) => {
                 const setClause = Object.keys(petOwnerUpdates).map(key => `${key} = ?`).join(', ');
                 const values = Object.values(petOwnerUpdates);
                 
-                const updatePetOwnerStmt = db.prepare(`UPDATE petowner SET ${setClause} WHERE id = ?`);
-                updatePetOwnerStmt.run(...values, userId);
+                await db.execute(`UPDATE petowner SET ${setClause} WHERE id = ?`, [...values, userId]);
             }
 
         } else if (userRole === 'Service provider') {
@@ -404,12 +386,11 @@ router.put('/', validateProfileUpdate, (req, res) => {
                 const setClause = Object.keys(providerUpdates).map(key => `${key} = ?`).join(', ');
                 const values = Object.values(providerUpdates);
                 
-                const updateProviderStmt = db.prepare(`UPDATE serviceprovider SET ${setClause} WHERE id = ?`);
-                updateProviderStmt.run(...values, userId);
+                await db.execute(`UPDATE serviceprovider SET ${setClause} WHERE id = ?`, [...values, userId]);
             }
         }
 
-        db.exec('COMMIT');
+        await db.commit();
 
         res.status(200).json({ 
             message: 'Profile updated successfully'
@@ -417,7 +398,7 @@ router.put('/', validateProfileUpdate, (req, res) => {
 
     } catch (err) {
         console.error('Profile update error:', err.message);
-        db.exec('ROLLBACK');
+        await db.rollback();
         
         if (err.message.includes('UNIQUE constraint failed')) {
             return res.status(409).json({ message: 'Phone number or email already in use' });
@@ -428,33 +409,31 @@ router.put('/', validateProfileUpdate, (req, res) => {
 });
 
 // Delete user account (protected route)
-router.delete('/', (req, res) => {
+router.delete('/', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
 
         // Start transaction
-        db.exec('BEGIN TRANSACTION');
+        await db.beginTransaction();
 
         // First check if user exists
-        const getUserStmt = db.prepare(`SELECT userid, name, email, role FROM users WHERE userid = ?`);
-        const user = getUserStmt.get(userId);
+        const user = await db.get(`SELECT userid, name, email, role FROM user WHERE userid = ?`, [userId]);
 
         if (!user) {
-            db.exec('ROLLBACK');
+            await db.rollback();
             return res.status(404).json({ message: 'User not found' });
         }
 
         // Delete user - CASCADE DELETE will automatically remove related records
-        const deleteUserStmt = db.prepare(`DELETE FROM users WHERE userid = ?`);
-        const result = deleteUserStmt.run(userId);
+        const result = await db.execute(`DELETE FROM user WHERE userid = ?`, [userId]);
 
-        if (result.changes === 0) {
-            db.exec('ROLLBACK');
+        if (result.affectedRows === 0) {
+            await db.rollback();
             return res.status(404).json({ message: 'User not found or already deleted' });
         }
 
-        db.exec('COMMIT');
+        await db.commit();
 
         console.log(`User account deleted: ${user.email} (${user.role})`);
 
@@ -470,7 +449,7 @@ router.delete('/', (req, res) => {
 
     } catch (err) {
         console.error('Account deletion error:', err.message);
-        db.exec('ROLLBACK');
+        await db.rollback();
         res.status(500).json({ message: 'Internal server error' });
     }
 });

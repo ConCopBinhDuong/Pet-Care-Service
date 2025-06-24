@@ -1,7 +1,7 @@
 // Token Blacklist Service
 // Manages revoked JWT tokens for immediate invalidation
 
-import db from '../Database_sqlite.js';
+import db from '../db.js';
 
 class TokenBlacklistService {
     constructor() {
@@ -15,14 +15,16 @@ class TokenBlacklistService {
      * @param {number} expiresAt - When the token expires (Unix timestamp)
      * @param {string} reason - Reason for blacklisting
      */
-    addToken(jti, userId, expiresAt, reason = 'logout') {
+    async addToken(jti, userId, expiresAt, reason = 'logout') {
         try {
-            const stmt = db.prepare(`
-                INSERT OR REPLACE INTO token_blacklist (jti, user_id, expires_at, reason)
+            await db.execute(`
+                INSERT INTO token_blacklist (jti, user_id, expires_at, reason)
                 VALUES (?, ?, ?, ?)
-            `);
-            
-            stmt.run(jti, userId, expiresAt, reason);
+                ON DUPLICATE KEY UPDATE
+                user_id = VALUES(user_id),
+                expires_at = VALUES(expires_at),
+                reason = VALUES(reason)
+            `, [jti, userId, expiresAt, reason]);
             
             console.log(`🚫 Token blacklisted: ${jti} (User: ${userId}, Reason: ${reason})`);
             return true;
@@ -37,14 +39,13 @@ class TokenBlacklistService {
      * @param {string} jti - JWT ID to check
      * @returns {boolean} True if token is blacklisted
      */
-    isTokenBlacklisted(jti) {
+    async isTokenBlacklisted(jti) {
         try {
-            const stmt = db.prepare(`
+            const result = await db.get(`
                 SELECT jti FROM token_blacklist 
-                WHERE jti = ? AND expires_at > strftime('%s', 'now')
-            `);
+                WHERE jti = ? AND expires_at > UNIX_TIMESTAMP()
+            `, [jti]);
             
-            const result = stmt.get(jti);
             return !!result;
         } catch (error) {
             console.error('❌ Error checking token blacklist:', error);
@@ -59,20 +60,23 @@ class TokenBlacklistService {
      * @param {number} userId - User ID
      * @param {string} reason - Reason for blacklisting
      */
-    blacklistUserTokens(userId, reason = 'security_action') {
+    async blacklistUserTokens(userId, reason = 'security_action') {
         try {
             // This is a simplified approach - in practice, you'd need to track active tokens
             // For now, we'll add a user-wide blacklist entry
             const futureTimestamp = Math.floor(Date.now() / 1000) + (24 * 60 * 60); // 24 hours from now
             
-            const stmt = db.prepare(`
-                INSERT OR REPLACE INTO token_blacklist (jti, user_id, expires_at, reason)
-                VALUES (?, ?, ?, ?)
-            `);
-            
             // Use a special JTI pattern for user-wide blacklisting
             const userBlacklistJti = `user_${userId}_${Date.now()}`;
-            stmt.run(userBlacklistJti, userId, futureTimestamp, reason);
+            
+            await db.execute(`
+                INSERT INTO token_blacklist (jti, user_id, expires_at, reason)
+                VALUES (?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                user_id = VALUES(user_id),
+                expires_at = VALUES(expires_at),
+                reason = VALUES(reason)
+            `, [userBlacklistJti, userId, futureTimestamp, reason]);
             
             console.log(`🚫 All tokens blacklisted for user: ${userId} (Reason: ${reason})`);
             return true;
@@ -86,20 +90,18 @@ class TokenBlacklistService {
      * Clean up expired tokens from blacklist
      * Should be run periodically to prevent database bloat
      */
-    cleanupExpiredTokens() {
+    async cleanupExpiredTokens() {
         try {
-            const stmt = db.prepare(`
+            const result = await db.execute(`
                 DELETE FROM token_blacklist 
-                WHERE expires_at <= strftime('%s', 'now')
+                WHERE expires_at <= UNIX_TIMESTAMP()
             `);
             
-            const result = stmt.run();
-            
-            if (result.changes > 0) {
-                console.log(`🧹 Cleaned up ${result.changes} expired blacklisted tokens`);
+            if (result.affectedRows > 0) {
+                console.log(`🧹 Cleaned up ${result.affectedRows} expired blacklisted tokens`);
             }
             
-            return result.changes;
+            return result.affectedRows;
         } catch (error) {
             console.error('❌ Error cleaning up expired tokens:', error);
             return 0;
@@ -110,16 +112,16 @@ class TokenBlacklistService {
      * Get blacklist statistics
      * @returns {Object} Statistics about the blacklist
      */
-    getBlacklistStats() {
+    async getBlacklistStats() {
         try {
-            const totalStmt = db.prepare(`SELECT COUNT(*) as total FROM token_blacklist`);
-            const activeStmt = db.prepare(`
+            const totalResult = await db.get(`SELECT COUNT(*) as total FROM token_blacklist`);
+            const activeResult = await db.get(`
                 SELECT COUNT(*) as active FROM token_blacklist 
-                WHERE expires_at > strftime('%s', 'now')
+                WHERE expires_at > UNIX_TIMESTAMP()
             `);
             
-            const total = totalStmt.get().total;
-            const active = activeStmt.get().active;
+            const total = totalResult.total;
+            const active = activeResult.active;
             
             return {
                 total,

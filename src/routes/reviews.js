@@ -1,11 +1,11 @@
 import express from 'express'
-import db from '../Database_sqlite.js'
+import db from '../db.js'
 import { validateReviewCreation, validateReviewUpdate } from '../middleware/validationMiddleware.js'
 
 const router = express.Router();
 
 // Get all reviews for the authenticated pet owner (their reviews)
-router.get('/my-reviews', (req, res) => {
+router.get('/my-reviews', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -17,7 +17,7 @@ router.get('/my-reviews', (req, res) => {
             });
         }
 
-        const getMyReviewsStmt = db.prepare(`
+        const reviews = await db.all(`
             SELECT 
                 sr.bookid, sr.stars, sr.comment,
                 b.servedate, b.status as booking_status,
@@ -31,9 +31,7 @@ router.get('/my-reviews', (req, res) => {
             JOIN users u ON sp.id = u.userid
             WHERE b.poid = ?
             ORDER BY b.servedate DESC
-        `);
-        
-        const reviews = getMyReviewsStmt.all(userId);
+        `, [userId]);
 
         res.status(200).json({
             message: 'Your reviews retrieved successfully',
@@ -47,7 +45,7 @@ router.get('/my-reviews', (req, res) => {
 });
 
 // Get all reviews for a specific service (for service providers to see their reviews)
-router.get('/service/:serviceId', (req, res) => {
+router.get('/service/:serviceId', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -58,13 +56,12 @@ router.get('/service/:serviceId', (req, res) => {
         }
 
         // Check if service exists and get provider info
-        const getServiceStmt = db.prepare(`
+        const service = await db.get(`
             SELECT s.serviceid, s.name, s.providerid, sp.business_name
             FROM service s
             JOIN serviceprovider sp ON s.providerid = sp.id
             WHERE s.serviceid = ?
-        `);
-        const service = getServiceStmt.get(serviceId);
+        `, [serviceId]);
 
         if (!service) {
             return res.status(404).json({ message: 'Service not found' });
@@ -77,7 +74,7 @@ router.get('/service/:serviceId', (req, res) => {
             });
         }
 
-        const getServiceReviewsStmt = db.prepare(`
+        const reviews = await db.all(`
             SELECT 
                 sr.bookid, sr.stars, sr.comment,
                 b.servedate, b.book_timestamp,
@@ -89,9 +86,7 @@ router.get('/service/:serviceId', (req, res) => {
             JOIN users u ON po.id = u.userid
             WHERE b.svid = ?
             ORDER BY b.servedate DESC
-        `);
-        
-        const reviews = getServiceReviewsStmt.all(serviceId);
+        `, [serviceId]);
 
         // Calculate average rating
         const avgRating = reviews.length > 0 
@@ -119,7 +114,7 @@ router.get('/service/:serviceId', (req, res) => {
 });
 
 // Get reviews for a specific service provider (all their services)
-router.get('/provider/:providerId', (req, res) => {
+router.get('/provider/:providerId', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -130,13 +125,12 @@ router.get('/provider/:providerId', (req, res) => {
         }
 
         // Check if provider exists
-        const getProviderStmt = db.prepare(`
+        const provider = await db.get(`
             SELECT sp.id, sp.business_name, u.name
             FROM serviceprovider sp
             JOIN users u ON sp.id = u.userid
             WHERE sp.id = ?
-        `);
-        const provider = getProviderStmt.get(providerId);
+        `, [providerId]);
 
         if (!provider) {
             return res.status(404).json({ message: 'Service provider not found' });
@@ -149,7 +143,7 @@ router.get('/provider/:providerId', (req, res) => {
             });
         }
 
-        const getProviderReviewsStmt = db.prepare(`
+        const reviews = await db.all(`
             SELECT 
                 sr.bookid, sr.stars, sr.comment,
                 b.servedate, b.book_timestamp,
@@ -163,9 +157,7 @@ router.get('/provider/:providerId', (req, res) => {
             JOIN users u ON po.id = u.userid
             WHERE s.providerid = ?
             ORDER BY b.servedate DESC
-        `);
-        
-        const reviews = getProviderReviewsStmt.all(providerId);
+        `, [providerId]);
 
         // Calculate statistics
         const avgRating = reviews.length > 0 
@@ -215,7 +207,7 @@ router.get('/provider/:providerId', (req, res) => {
 });
 
 // Create a new review for a completed booking
-router.post('/booking/:bookingId', validateReviewCreation, (req, res) => {
+router.post('/booking/:bookingId', validateReviewCreation, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -234,13 +226,12 @@ router.post('/booking/:bookingId', validateReviewCreation, (req, res) => {
         }
 
         // Check if booking exists and belongs to the user
-        const getBookingStmt = db.prepare(`
+        const booking = await db.get(`
             SELECT b.bookid, b.poid, b.status, b.servedate, s.name as service_name
             FROM booking b
             JOIN service s ON b.svid = s.serviceid
             WHERE b.bookid = ?
-        `);
-        const booking = getBookingStmt.get(bookingId);
+        `, [bookingId]);
 
         if (!booking) {
             return res.status(404).json({ message: 'Booking not found' });
@@ -260,10 +251,9 @@ router.post('/booking/:bookingId', validateReviewCreation, (req, res) => {
         }
 
         // Check if review already exists
-        const checkExistingReviewStmt = db.prepare(`
+        const existingReview = await db.get(`
             SELECT bookid FROM service_review WHERE bookid = ?
-        `);
-        const existingReview = checkExistingReviewStmt.get(bookingId);
+        `, [bookingId]);
 
         if (existingReview) {
             return res.status(409).json({ 
@@ -272,38 +262,40 @@ router.post('/booking/:bookingId', validateReviewCreation, (req, res) => {
         }
 
         // Start transaction
-        db.exec('BEGIN TRANSACTION');
+        const connection = await db.beginTransaction();
+        try {
+            // Insert new review
+            await connection.execute(`
+                INSERT INTO service_review (bookid, stars, comment)
+                VALUES (?, ?, ?)
+            `, [bookingId, stars, comment || null]);
 
-        // Insert new review
-        const insertReviewStmt = db.prepare(`
-            INSERT INTO service_review (bookid, stars, comment)
-            VALUES (?, ?, ?)
-        `);
+            await connection.commit();
 
-        insertReviewStmt.run(bookingId, stars, comment || null);
+            res.status(201).json({
+                message: 'Review created successfully',
+                review: {
+                    bookingId: bookingId,
+                    serviceName: booking.service_name,
+                    stars: stars,
+                    comment: comment,
+                    serviceDate: booking.servedate
+                }
+            });
 
-        db.exec('COMMIT');
-
-        res.status(201).json({
-            message: 'Review created successfully',
-            review: {
-                bookingId: bookingId,
-                serviceName: booking.service_name,
-                stars: stars,
-                comment: comment,
-                serviceDate: booking.servedate
-            }
-        });
+        } catch (transactionError) {
+            await connection.rollback();
+            throw transactionError;
+        }
 
     } catch (err) {
         console.error('Create review error:', err.message);
-        db.exec('ROLLBACK');
         res.status(500).json({ message: 'Internal server error' });
     }
 });
 
 // Update an existing review
-router.put('/booking/:bookingId', validateReviewUpdate, (req, res) => {
+router.put('/booking/:bookingId', validateReviewUpdate, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -322,14 +314,13 @@ router.put('/booking/:bookingId', validateReviewUpdate, (req, res) => {
         }
 
         // Check if review exists and belongs to the user
-        const getReviewStmt = db.prepare(`
+        const review = await db.get(`
             SELECT sr.bookid, sr.stars, sr.comment, b.poid, s.name as service_name
             FROM service_review sr
             JOIN booking b ON sr.bookid = b.bookid
             JOIN service s ON b.svid = s.serviceid
             WHERE sr.bookid = ?
-        `);
-        const review = getReviewStmt.get(bookingId);
+        `, [bookingId]);
 
         if (!review) {
             return res.status(404).json({ message: 'Review not found' });
@@ -342,39 +333,41 @@ router.put('/booking/:bookingId', validateReviewUpdate, (req, res) => {
         }
 
         // Start transaction
-        db.exec('BEGIN TRANSACTION');
+        const connection = await db.beginTransaction();
+        try {
+            // Update review
+            await connection.execute(`
+                UPDATE service_review 
+                SET stars = ?, comment = ?
+                WHERE bookid = ?
+            `, [stars, comment || null, bookingId]);
 
-        // Update review
-        const updateReviewStmt = db.prepare(`
-            UPDATE service_review 
-            SET stars = ?, comment = ?
-            WHERE bookid = ?
-        `);
+            await connection.commit();
 
-        updateReviewStmt.run(stars, comment || null, bookingId);
+            res.status(200).json({
+                message: 'Review updated successfully',
+                review: {
+                    bookingId: bookingId,
+                    serviceName: review.service_name,
+                    stars: stars,
+                    comment: comment,
+                    previousRating: review.stars
+                }
+            });
 
-        db.exec('COMMIT');
-
-        res.status(200).json({
-            message: 'Review updated successfully',
-            review: {
-                bookingId: bookingId,
-                serviceName: review.service_name,
-                stars: stars,
-                comment: comment,
-                previousRating: review.stars
-            }
-        });
+        } catch (transactionError) {
+            await connection.rollback();
+            throw transactionError;
+        }
 
     } catch (err) {
         console.error('Update review error:', err.message);
-        db.exec('ROLLBACK');
         res.status(500).json({ message: 'Internal server error' });
     }
 });
 
 // Delete a review
-router.delete('/booking/:bookingId', (req, res) => {
+router.delete('/booking/:bookingId', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -392,14 +385,13 @@ router.delete('/booking/:bookingId', (req, res) => {
         }
 
         // Check if review exists and belongs to the user
-        const getReviewStmt = db.prepare(`
+        const review = await db.get(`
             SELECT sr.bookid, sr.stars, sr.comment, b.poid, s.name as service_name
             FROM service_review sr
             JOIN booking b ON sr.bookid = b.bookid
             JOIN service s ON b.svid = s.serviceid
             WHERE sr.bookid = ?
-        `);
-        const review = getReviewStmt.get(bookingId);
+        `, [bookingId]);
 
         if (!review) {
             return res.status(404).json({ message: 'Review not found' });
@@ -412,41 +404,43 @@ router.delete('/booking/:bookingId', (req, res) => {
         }
 
         // Start transaction
-        db.exec('BEGIN TRANSACTION');
+        const connection = await db.beginTransaction();
+        try {
+            // Delete review
+            const result = await connection.execute(`
+                DELETE FROM service_review WHERE bookid = ?
+            `, [bookingId]);
 
-        // Delete review
-        const deleteReviewStmt = db.prepare(`
-            DELETE FROM service_review WHERE bookid = ?
-        `);
-
-        const result = deleteReviewStmt.run(bookingId);
-
-        if (result.changes === 0) {
-            db.exec('ROLLBACK');
-            return res.status(404).json({ message: 'Review not found or already deleted' });
-        }
-
-        db.exec('COMMIT');
-
-        res.status(200).json({
-            message: 'Review deleted successfully',
-            deletedReview: {
-                bookingId: bookingId,
-                serviceName: review.service_name,
-                stars: review.stars,
-                comment: review.comment
+            if (result.affectedRows === 0) {
+                await connection.rollback();
+                return res.status(404).json({ message: 'Review not found or already deleted' });
             }
-        });
+
+            await connection.commit();
+
+            res.status(200).json({
+                message: 'Review deleted successfully',
+                deletedReview: {
+                    bookingId: bookingId,
+                    serviceName: review.service_name,
+                    stars: review.stars,
+                    comment: review.comment
+                }
+            });
+
+        } catch (transactionError) {
+            await connection.rollback();
+            throw transactionError;
+        }
 
     } catch (err) {
         console.error('Delete review error:', err.message);
-        db.exec('ROLLBACK');
         res.status(500).json({ message: 'Internal server error' });
     }
 });
 
 // Get a specific review by booking ID
-router.get('/booking/:bookingId', (req, res) => {
+router.get('/booking/:bookingId', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -456,7 +450,7 @@ router.get('/booking/:bookingId', (req, res) => {
             return res.status(400).json({ message: 'Invalid booking ID' });
         }
 
-        const getReviewStmt = db.prepare(`
+        const review = await db.get(`
             SELECT 
                 sr.bookid, sr.stars, sr.comment,
                 b.poid, b.servedate, b.book_timestamp, b.status,
@@ -471,9 +465,7 @@ router.get('/booking/:bookingId', (req, res) => {
             JOIN users u_reviewer ON b.poid = u_reviewer.userid
             JOIN users u_provider ON sp.id = u_provider.userid
             WHERE sr.bookid = ?
-        `);
-        
-        const review = getReviewStmt.get(bookingId);
+        `, [bookingId]);
 
         if (!review) {
             return res.status(404).json({ message: 'Review not found' });

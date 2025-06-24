@@ -1,5 +1,5 @@
-create database petcare;
-use petcare;
+create database petcare2;
+use petcare2;
 
 create table user (
 	userid int auto_increment,
@@ -8,6 +8,8 @@ create table user (
     password varchar(20) not null,
     gender ENUM('Male', 'Female', 'Other'),
     role enum('Pet owner', 'Service provider', 'Manager'),
+    email_verified enum('0','1') default '0',
+    created_at datetime default now(),
     constraint pk_user primary key (userid)
 );
 
@@ -40,7 +42,9 @@ create table serviceprovider (
 );
 
 create table ticket(
+    
 		ticketid int auto_increment,
+        bookingid int,
         subject varchar(100),
         description longtext,
         attachment mediumblob,
@@ -49,10 +53,23 @@ create table ticket(
         userid int,
         createtime datetime default now(),
         managerid int,
-        assigntime datetime,
+        assigntime datetime,  
+        constraint fk_ticket_booking foreign key (bookingid) references booking(bookid) on update cascade on delete cascade, 
         constraint pk_ticket primary key (ticketid),
         constraint fk_ticket_user foreign key (userid) references user(userid) on update cascade on delete cascade ,
         constraint fk_ticket_manager foreign key (managerid) references manager(id) on update cascade on delete cascade 
+);
+
+create table ticketreply (
+	replyid int auto_increment,
+    ticketid int,
+    userid int,
+    role varchar(20),
+    message mediumtext,
+    create_at datetime default now(),
+    constraint fk_ticketreply_ticketid foreign key (ticketid) references ticket(ticketid) on update cascade on delete cascade,
+	constraint fk_ticketreply_userid foreign key (userid) references user(userid) on update cascade on delete cascade,
+	constraint pk_ticketreply primary key (replyid)
 );
 
 create table thread (
@@ -60,7 +77,7 @@ create table thread (
     timestamp datetime default now(),
     text mediumtext,
     image longblob,
-    ownerid int,
+    ownerid int,    
     constraint fk_thread foreign key(ownerid) references petowner(id) on update cascade on delete cascade,
     constraint pk_thread primary key(threadid)
 );
@@ -145,14 +162,20 @@ create table service (
     license mediumblob,
     typeid int,
     providerid int,
+    status enum('pending', 'approved', 'rejected') default 'pending',
+    submission_date datetime default now(),
+    review_date datetime,
+    reviewed_by int,
+    rejection_reason mediumtext,
     constraint pk_service primary key (serviceid),
     constraint fk_service_type foreign key (typeid) references servicetype(typeid) on update cascade on delete cascade,
-	constraint fk_service_provider foreign key (providerid) references serviceprovider(id) on update cascade on delete cascade
+	constraint fk_service_provider foreign key (providerid) references serviceprovider(id) on update cascade on delete cascade,
+    constraint fk_reviewed_by foreign key (reviewed_by) references manager(id) on update cascade on delete set null
 );
 
 create table timeslot (
 	serviceid int,
-    slot time,
+    slot varchar(20),
 	constraint fk_timeslot_service foreign key (serviceid) references service(serviceid) on update cascade on delete cascade,
     constraint pk_timeslot primary key (serviceid,slot)
 );
@@ -161,7 +184,7 @@ create table booking (
 	bookid int auto_increment,
     poid int,
     svid int,
-    slot time,
+    slot varchar(20),
     book_timestamp datetime default now(),
     servedate date,
     payment_method varchar(20),
@@ -189,7 +212,7 @@ create table service_report(
 
 create table service_review(
 	bookid int, 
-	start int,
+	stars int,
     comment mediumtext,
     constraint fk_review foreign key (bookid) references booking(bookid) on update cascade on delete cascade,
     constraint pk_review primary key (bookid)
@@ -200,16 +223,26 @@ create table service_update(
     no_update int,
 	text mediumtext,
     image mediumblob,
+    sender_type enum('service_provider', 'pet_owner'),
+    sender_id int,
+    created_at datetime default now(),
+    constraint fk_serviceupdate_sender foreign key (sender_id) references user(userid) on update cascade on delete cascade,
     constraint fk_update foreign key (bookid) references booking(bookid) on update cascade on delete cascade,
-    constraint pk_report primary key (bookid, no_update)
+    constraint pk_serviceupdate primary key (bookid, no_update)
 );
-
 
 create table notification(
 	notiid int auto_increment,
     text mediumtext,
     userid int,
+    type enum('general', 'diet', 'activity','service_approved', 'service_rejected', 'booking_accepted', 'booking_rejected', 'booking_expired', 'booking_request', 'booking_reminder'),
+    schedule_id int,
+    related_id int,
+    scheduled_time datetime,
+    created_at datetime default now(),
+    read_status enum('0','1') default '0',
     constraint fk_noti foreign key (userid) references user(userid) on update cascade on delete cascade,
+    constraint fk_noti_schedule foreign key (schedule_id) references petschedule(petscheduleid) on update cascade on delete cascade,
     constraint pk_noti primary key (notiid)
 );
 
@@ -223,4 +256,19 @@ create table schedule(
 	constraint pk_schedule primary key (scheduleid)
 );
 
+create table token_blacklist(
+    jti varchar(128),
+    user_id int not null,
+    expires_at int not null,
+    reason mediumtext,
+	created_at datetime default now(),
+    constraint fk_token_blacklist_user foreign key (user_id) references user(userid) on update cascade on delete cascade,
+    constraint pk_token_blacklist primary key (jti)
+);
 
+create index idx_token_blacklist_expires on token_blacklist(expires_at); 
+create index idx_token_blacklist_user_id on token_blacklist(user_id);
+create index idx_notification_userid on notification(userid, created_at desc);
+create index idx_notification_type on notification(type);
+create index idx_notification_read_status on notification(read_status);
+create index idx_notification_scedule_id on notification(schedule_id);

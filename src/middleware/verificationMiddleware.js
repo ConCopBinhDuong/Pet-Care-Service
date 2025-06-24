@@ -1,17 +1,16 @@
-import db from '../Database_sqlite.js';
+import db from '../db.js';
 
 /**
  * Middleware to require email verification
  * Checks if user's email is verified before allowing access
  */
-export const requireEmailVerification = (req, res, next) => {
+export const requireEmailVerification = async (req, res, next) => {
     try {
         // Get user info from the token (set by authMiddleware)
         const userId = req.user.userid;
         
         // Check user's verification status in database
-        const stmt = db.prepare('SELECT email_verified FROM users WHERE userid = ?');
-        const user = stmt.get(userId);
+        const user = await db.get('SELECT email_verified FROM user WHERE userid = ?', [userId]);
         
         if (!user) {
             return res.status(404).json({
@@ -42,14 +41,13 @@ export const requireEmailVerification = (req, res, next) => {
  * Middleware to require full verification (email only)
  * Checks if email is verified before allowing access
  */
-export const requireFullVerification = (req, res, next) => {
+export const requireFullVerification = async (req, res, next) => {
     try {
         // Get user info from the token (set by authMiddleware)
         const userId = req.user.userid;
         
         // Check user's verification status in database
-        const stmt = db.prepare('SELECT email_verified FROM users WHERE userid = ?');
-        const user = stmt.get(userId);
+        const user = await db.get('SELECT email_verified FROM user WHERE userid = ?', [userId]);
         
         if (!user) {
             return res.status(404).json({
@@ -80,12 +78,11 @@ export const requireFullVerification = (req, res, next) => {
  * Middleware to check if user has any pending verifications
  * Returns verification status without blocking access
  */
-export const checkVerificationStatus = (req, res, next) => {
+export const checkVerificationStatus = async (req, res, next) => {
     try {
         const userId = req.user.userid;
         
-        const stmt = db.prepare('SELECT email_verified FROM users WHERE userid = ?');
-        const user = stmt.get(userId);
+        const user = await db.get('SELECT email_verified FROM user WHERE userid = ?', [userId]);
         
         if (user) {
             req.verificationStatus = {

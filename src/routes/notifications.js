@@ -1,6 +1,7 @@
 import express from 'express';
 import notificationService from '../services/notificationService.js';
 import authMiddleware from '../middleware/authMiddleware.js';
+import db from '../db.js';
 
 const router = express.Router();
 
@@ -234,7 +235,7 @@ router.post('/check-schedules', (req, res) => {
  * Get system notification statistics (Admin only)
  * GET /api/notifications/admin/stats
  */
-router.get('/admin/stats', (req, res) => {
+router.get('/admin/stats', async (req, res) => {
     try {
         const userRole = req.user.role;
 
@@ -278,8 +279,8 @@ router.get('/admin/stats', (req, res) => {
             GROUP BY type
         `;
 
-        const dailyStats = notificationService.db.prepare(statsQuery).all();
-        const typeStats = notificationService.db.prepare(overallStatsQuery).all();
+        const dailyStats = await db.all(statsQuery);
+        const typeStats = await db.all(overallStatsQuery);
 
         res.status(200).json({
             message: 'System notification statistics retrieved successfully',

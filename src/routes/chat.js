@@ -1,19 +1,19 @@
 import express from 'express'
-import db from '../Database_sqlite.js'
+import db from '../db.js'
 import { validateChatMessage } from '../middleware/validationMiddleware.js'
 import notificationService from '../services/notificationService.js'
 
 const router = express.Router();
 
 // Get chat messages for a specific booking
-router.get('/booking/:bookingId', (req, res) => {
+router.get('/booking/:bookingId', async (req, res) => {
     try {
         const { bookingId } = req.params;
         const userId = req.user.userid;
         const userRole = req.user.role;
 
         // Verify user has access to this booking
-        const bookingCheckStmt = db.prepare(`
+        const booking = await db.get(`
             SELECT 
                 b.bookid, b.poid, b.status,
                 s.providerid,
@@ -25,12 +25,10 @@ router.get('/booking/:bookingId', (req, res) => {
             JOIN service s ON b.svid = s.serviceid
             JOIN serviceprovider sp ON s.providerid = sp.id
             JOIN petowner po ON b.poid = po.id
-            JOIN users u_owner ON po.id = u_owner.userid
-            JOIN users u_provider ON sp.id = u_provider.userid
+            JOIN user u_owner ON po.id = u_owner.userid
+            JOIN user u_provider ON sp.id = u_provider.userid
             WHERE b.bookid = ?
-        `);
-
-        const booking = bookingCheckStmt.get(bookingId);
+        `, [bookingId]);
 
         if (!booking) {
             return res.status(404).json({ message: 'Booking not found' });
@@ -53,7 +51,7 @@ router.get('/booking/:bookingId', (req, res) => {
         }
 
         // Get all service updates (chat messages) for this booking
-        const getChatMessagesStmt = db.prepare(`
+        const messages = await db.all(`
             SELECT 
                 su.bookid,
                 su.no_update,
@@ -74,14 +72,12 @@ router.get('/booking/:bookingId', (req, res) => {
             JOIN booking b ON su.bookid = b.bookid
             JOIN service s ON b.svid = s.serviceid
             LEFT JOIN serviceprovider sp ON su.sender_type = 'service_provider' AND su.sender_id = sp.id
-            LEFT JOIN users u_provider ON sp.id = u_provider.userid
+            LEFT JOIN user u_provider ON sp.id = u_provider.userid
             LEFT JOIN petowner po ON su.sender_type = 'pet_owner' AND su.sender_id = po.id
-            LEFT JOIN users u_owner ON po.id = u_owner.userid
+            LEFT JOIN user u_owner ON po.id = u_owner.userid
             WHERE su.bookid = ?
             ORDER BY su.no_update ASC
-        `);
-
-        const messages = getChatMessagesStmt.all(bookingId);
+        `, [bookingId]);
 
         res.status(200).json({
             message: 'Chat messages retrieved successfully',
@@ -105,7 +101,7 @@ router.get('/booking/:bookingId', (req, res) => {
 });
 
 // Send a new chat message (both service providers and pet owners can send messages)
-router.post('/booking/:bookingId/message', validateChatMessage, (req, res) => {
+router.post('/booking/:bookingId/message', validateChatMessage, async (req, res) => {
     try {
         const { bookingId } = req.params;
         const { text, image } = req.body;
@@ -120,14 +116,12 @@ router.post('/booking/:bookingId/message', validateChatMessage, (req, res) => {
         }
 
         // Verify user has access to this booking
-        const bookingCheckStmt = db.prepare(`
+        const booking = await db.get(`
             SELECT b.bookid, b.poid, b.status, s.providerid
             FROM booking b
             JOIN service s ON b.svid = s.serviceid
             WHERE b.bookid = ?
-        `);
-
-        const booking = bookingCheckStmt.get(bookingId);
+        `, [bookingId]);
 
         if (!booking) {
             return res.status(404).json({ 
@@ -161,13 +155,11 @@ router.post('/booking/:bookingId/message', validateChatMessage, (req, res) => {
         }
 
         // Get the next update number for this booking
-        const getMaxUpdateStmt = db.prepare(`
+        const result = await db.get(`
             SELECT COALESCE(MAX(no_update), 0) as max_update
             FROM service_update
             WHERE bookid = ?
-        `);
-
-        const result = getMaxUpdateStmt.get(bookingId);
+        `, [bookingId]);
         const nextUpdateNumber = result.max_update + 1;
 
         // Convert image to blob if provided
@@ -178,33 +170,29 @@ router.post('/booking/:bookingId/message', validateChatMessage, (req, res) => {
         }
 
         // Insert the new service update
-        const insertUpdateStmt = db.prepare(`
+        await db.execute(`
             INSERT INTO service_update (bookid, no_update, text, image, sender_type, sender_id)
             VALUES (?, ?, ?, ?, ?, ?)
-        `);
-
-        insertUpdateStmt.run(bookingId, nextUpdateNumber, text, imageBlob, senderType, userId);
+        `, [bookingId, nextUpdateNumber, text, imageBlob, senderType, userId]);
 
         // Get sender info for notification and response
         let senderInfo;
         let notificationRecipientId;
         
         if (senderType === 'service_provider') {
-            const providerInfoStmt = db.prepare(`
+            senderInfo = await db.get(`
                 SELECT sp.business_name, u.name as contact_name
                 FROM serviceprovider sp
-                JOIN users u ON sp.id = u.userid
+                JOIN user u ON sp.id = u.userid
                 WHERE sp.id = ?
-            `);
-            senderInfo = providerInfoStmt.get(userId);
+            `, [userId]);
             notificationRecipientId = booking.poid; // Notify pet owner
         } else {
-            const ownerInfoStmt = db.prepare(`
+            senderInfo = await db.get(`
                 SELECT u.name as owner_name
-                FROM users u
+                FROM user u
                 WHERE u.userid = ?
-            `);
-            senderInfo = ownerInfoStmt.get(userId);
+            `, [userId]);
             notificationRecipientId = booking.providerid; // Notify service provider
         }
 
@@ -252,7 +240,7 @@ router.post('/booking/:bookingId/message', validateChatMessage, (req, res) => {
 });
 
 // Get all bookings with chat activity for a user
-router.get('/conversations', (req, res) => {
+router.get('/conversations', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -274,7 +262,7 @@ router.get('/conversations', (req, res) => {
                 FROM booking b
                 JOIN service s ON b.svid = s.serviceid
                 JOIN serviceprovider sp ON s.providerid = sp.id
-                JOIN users u ON sp.id = u.userid
+                JOIN user u ON sp.id = u.userid
                 LEFT JOIN service_update su ON b.bookid = su.bookid
                 WHERE b.poid = ?
                 GROUP BY b.bookid, b.status, b.servedate, s.name, sp.business_name, u.name
@@ -319,9 +307,9 @@ router.get('/conversations', (req, res) => {
                 FROM booking b
                 JOIN service s ON b.svid = s.serviceid
                 JOIN serviceprovider sp ON s.providerid = sp.id
-                JOIN users u_provider ON sp.id = u_provider.userid
+                JOIN user u_provider ON sp.id = u_provider.userid
                 JOIN petowner po ON b.poid = po.id
-                JOIN users u_owner ON po.id = u_owner.userid
+                JOIN user u_owner ON po.id = u_owner.userid
                 LEFT JOIN service_update su ON b.bookid = su.bookid
                 GROUP BY b.bookid, b.status, b.servedate, s.name, sp.business_name, u_provider.name, u_owner.name
                 ORDER BY b.servedate DESC
@@ -329,8 +317,7 @@ router.get('/conversations', (req, res) => {
             params = [];
         }
 
-        const conversationsStmt = db.prepare(query);
-        const conversations = conversationsStmt.all(...params);
+        const conversations = await db.all(query, params);
 
         res.status(200).json({
             message: 'Conversations retrieved successfully',
@@ -346,21 +333,19 @@ router.get('/conversations', (req, res) => {
 
 
 // Get image from service update
-router.get('/message/:bookingId/:updateNumber/image', (req, res) => {
+router.get('/message/:bookingId/:updateNumber/image', async (req, res) => {
     try {
         const { bookingId, updateNumber } = req.params;
         const userId = req.user.userid;
         const userRole = req.user.role;
 
         // Verify user has access to this booking
-        const accessCheckStmt = db.prepare(`
+        const booking = await db.get(`
             SELECT b.bookid, b.poid, s.providerid
             FROM booking b
             JOIN service s ON b.svid = s.serviceid
             WHERE b.bookid = ?
-        `);
-
-        const booking = accessCheckStmt.get(bookingId);
+        `, [bookingId]);
 
         if (!booking) {
             return res.status(404).json({ message: 'Booking not found' });
@@ -383,13 +368,11 @@ router.get('/message/:bookingId/:updateNumber/image', (req, res) => {
         }
 
         // Get the image
-        const getImageStmt = db.prepare(`
+        const result = await db.get(`
             SELECT image
             FROM service_update
             WHERE bookid = ? AND no_update = ?
-        `);
-
-        const result = getImageStmt.get(bookingId, updateNumber);
+        `, [bookingId, updateNumber]);
 
         if (!result || !result.image) {
             return res.status(404).json({ message: 'Image not found' });

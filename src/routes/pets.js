@@ -2,7 +2,7 @@ import express from 'express'
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import db from '../Database_sqlite.js'
+import db from '../db.js'
 import { validatePetCreation, validatePetUpdate } from '../middleware/validationMiddleware.js'
 import authMiddleware from '../middleware/authMiddleware.js';
 
@@ -24,7 +24,7 @@ const validateBase64Image = (base64String) => {
 };
 
 // Get all pets for the authenticated pet owner
-router.get('/', (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -36,14 +36,12 @@ router.get('/', (req, res) => {
             });
         }
 
-        const getPetsStmt = db.prepare(`
+        const pets = await db.all(`
             SELECT petid, name, breed, description, age, dob, picture
             FROM pet 
             WHERE userid = ?
             ORDER BY name ASC
-        `);
-        
-        const pets = getPetsStmt.all(userId);
+        `, [userId]);
 
         res.status(200).json({
             message: 'Pets retrieved successfully',
@@ -88,8 +86,7 @@ router.post('/', authMiddleware, async (req, res) => {
         }
 
         // Verify pet owner status in database
-        const checkPetOwnerStmt = db.prepare('SELECT id FROM petowner JOIN users ON id = userid WHERE id = ?');
-        const petOwner = checkPetOwnerStmt.get(userId);
+        const petOwner = await db.get('SELECT id FROM petowner JOIN user ON id = userid WHERE id = ?', [userId]);
 
         if (!petOwner) {
             return res.status(403).json({ 
@@ -114,82 +111,80 @@ router.post('/', authMiddleware, async (req, res) => {
         const imageBuffer = Buffer.from(base64Data, 'base64');
 
         // Start transaction
-        db.prepare('BEGIN').run();
-
-        // Save file to disk
-        fs.writeFileSync(filepath, imageBuffer);
-
-        // Insert new pet
-        const insertPetStmt = db.prepare(`
-            INSERT INTO pet (name, breed, description, age, dob, picture, userid)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `);
-
-        const relativePath = filepath.replace(/\\/g, '/');
-        const result = insertPetStmt.run(
-            name, 
-            breed, 
-            description || null,
-            age || null,
-            dob || null, 
-            relativePath,
-            userId
-        );
-
-        // Get the newly created pet
-        const getNewPetStmt = db.prepare(`
-            SELECT petid, name, breed, description, age, dob, picture
-            FROM pet 
-            WHERE petid = ?
-        `);
-        
-        const newPet = getNewPetStmt.get(result.lastInsertRowid);
-
-        // Commit transaction
-        db.prepare('COMMIT').run();
-
-        res.status(201).json({
-            success: true,
-            message: 'Pet added successfully',
-            pet: newPet
-        });
-
-    } catch (err) {
-        console.error('Add pet error:', err);
-        
-        // Rollback transaction if active
         try {
-            db.prepare('ROLLBACK').run();
-        } catch (rollbackErr) {
-            console.error('Rollback error:', rollbackErr);
-        }
-        
-        // Clean up uploaded file if exists
-        if (filepath && fs.existsSync(filepath)) {
+            await db.beginTransaction();
+
+            // Save file to disk
+            fs.writeFileSync(filepath, imageBuffer);
+
+            // Insert new pet
+            const relativePath = filepath.replace(/\\/g, '/');
+            const result = await db.execute(`
+                INSERT INTO pet (name, breed, description, age, dob, picture, userid)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `, [name, breed, description || null, age || null, dob || null, relativePath, userId]);
+
+            // Get the newly created pet
+            const newPet = await db.get(`
+                SELECT petid, name, breed, description, age, dob, picture
+                FROM pet 
+                WHERE petid = ?
+            `, [result.insertId]);
+
+            // Commit transaction
+            await db.commit();
+
+            res.status(201).json({
+                success: true,
+                message: 'Pet added successfully',
+                pet: newPet
+            });
+
+        } catch (err) {
+            console.error('Add pet error:', err);
+            
+            // Rollback transaction if active
             try {
-                fs.unlinkSync(filepath);
-            } catch (unlinkErr) {
-                console.error('File cleanup error:', unlinkErr);
+                await db.rollback();
+            } catch (rollbackErr) {
+                console.error('Rollback error:', rollbackErr);
             }
-        }
-        
-        if (err.message.includes('UNIQUE constraint failed')) {
-            return res.status(409).json({ 
+            
+            // Clean up uploaded file if exists
+            if (filepath && fs.existsSync(filepath)) {
+                try {
+                    fs.unlinkSync(filepath);
+                } catch (unlinkErr) {
+                    console.error('File cleanup error:', unlinkErr);
+                }
+            }
+            
+            if (err.message.includes('UNIQUE constraint failed')) {
+                return res.status(409).json({ 
+                    success: false,
+                    message: 'Pet with this name already exists' 
+                });
+            }
+            
+            res.status(500).json({ 
                 success: false,
-                message: 'Pet with this name already exists' 
+                message: 'Internal server error',
+                error: err.message 
             });
         }
-        
-        res.status(500).json({ 
+
+    } catch (error) {
+        console.error('Outer pet error:', error);
+        res.status(500).json({
             success: false,
-            message: 'Internal server error',
-            error: err.message 
+            message: 'Failed to add pet',
+            error: error.message
         });
     }
 });
 
 // Get a specific pet by ID
-router.get('/:petId', (req, res) => {
+router.get('/:petId', authMiddleware, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -207,13 +202,11 @@ router.get('/:petId', (req, res) => {
         }
 
         // Get pet and verify ownership
-        const getPetStmt = db.prepare(`
+        const pet = await db.get(`
             SELECT petid, name, breed, description, age, dob, picture, userid
             FROM pet 
             WHERE petid = ?
-        `);
-        
-        const pet = getPetStmt.get(petId);
+        `, [petId]);
 
         if (!pet) {
             return res.status(404).json({ message: 'Pet not found' });
@@ -258,10 +251,9 @@ router.put('/:id', authMiddleware, async (req, res) => {
         }
 
         // Get existing pet and verify ownership
-        const getPetStmt = db.prepare(`
+        const existingPet = await db.get(`
             SELECT * FROM pet WHERE petid = ? AND userid = ?
-        `);
-        const existingPet = getPetStmt.get(petId, userId);
+        `, [petId, userId]);
 
         if (!existingPet) {
             return res.status(404).json({
@@ -310,76 +302,88 @@ router.put('/:id', authMiddleware, async (req, res) => {
         }
 
         // Start transaction
-        db.prepare('BEGIN').run();
+        try {
+            await db.beginTransaction();
 
-        // Save new image if exists
-        if (picture) {
-            const base64Data = picture.split(',')[1];
-            const imageBuffer = Buffer.from(base64Data, 'base64');
-            fs.writeFileSync(newFilepath, imageBuffer);
-        }
+            // Save new image if exists
+            if (picture) {
+                const base64Data = picture.split(',')[1];
+                const imageBuffer = Buffer.from(base64Data, 'base64');
+                fs.writeFileSync(newFilepath, imageBuffer);
+            }
 
-        // Update pet record
-        const updateQuery = `
-            UPDATE pet 
-            SET ${updateFields.join(', ')}
-            WHERE petid = ? AND userid = ?
-        `;
-        params.push(petId, userId);
+            // Update pet record
+            const updateQuery = `
+                UPDATE pet 
+                SET ${updateFields.join(', ')}
+                WHERE petid = ? AND userid = ?
+            `;
+            params.push(petId, userId);
 
-        const updateStmt = db.prepare(updateQuery);
-        updateStmt.run(...params);
+            await db.execute(updateQuery, params);
 
         // Delete old image if it was updated
         if (oldPicturePath && fs.existsSync(oldPicturePath)) {
             fs.unlinkSync(oldPicturePath);
         }
 
-        // Get updated pet details
-        const getUpdatedPetStmt = db.prepare(`
-            SELECT petid, name, breed, description, age, dob, picture
-            FROM pet WHERE petid = ?
-        `);
-        const updatedPet = getUpdatedPetStmt.get(petId);
-
-        // Commit transaction
-        db.prepare('COMMIT').run();
-
-        res.json({
-            success: true,
-            message: 'Pet updated successfully',
-            pet: updatedPet
-        });
-
-    } catch (err) {
-        console.error('Update pet error:', err);
-        
-        // Rollback transaction
-        try {
-            db.prepare('ROLLBACK').run();
-        } catch (rollbackErr) {
-            console.error('Rollback error:', rollbackErr);
-        }
-
-        // Clean up new uploaded file if exists
-        if (newFilepath && fs.existsSync(newFilepath)) {
-            try {
-                fs.unlinkSync(newFilepath);
-            } catch (unlinkErr) {
-                console.error('File cleanup error:', unlinkErr);
+            // Delete old image if it was updated
+            if (oldPicturePath && fs.existsSync(oldPicturePath)) {
+                fs.unlinkSync(oldPicturePath);
             }
-        }
 
+            // Get updated pet details
+            const updatedPet = await db.get(`
+                SELECT petid, name, breed, description, age, dob, picture
+                FROM pet WHERE petid = ?
+            `, [petId]);
+
+            // Commit transaction
+            await db.commit();
+
+            res.json({
+                success: true,
+                message: 'Pet updated successfully',
+                pet: updatedPet
+            });
+
+        } catch (err) {
+            console.error('Update pet error:', err);
+            
+            // Rollback transaction
+            try {
+                await db.rollback();
+            } catch (rollbackErr) {
+                console.error('Rollback error:', rollbackErr);
+            }
+
+            // Clean up new uploaded file if exists
+            if (newFilepath && fs.existsSync(newFilepath)) {
+                try {
+                    fs.unlinkSync(newFilepath);
+                } catch (unlinkErr) {
+                    console.error('File cleanup error:', unlinkErr);
+                }
+            }
+
+            res.status(500).json({
+                success: false,
+                message: 'Failed to update pet',
+                error: err.message
+            });
+        }
+    } catch (error) {
+        console.error('Update pet error:', error);
         res.status(500).json({
             success: false,
             message: 'Failed to update pet',
-            error: err.message
+            error: error.message
         });
     }
 });
 
 // Delete a specific pet
-router.delete('/:petId', (req, res) => {
+router.delete('/:petId', authMiddleware, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -397,54 +401,58 @@ router.delete('/:petId', (req, res) => {
         }
 
         // Start transaction
-        db.exec('BEGIN TRANSACTION');
+        try {
+            await db.beginTransaction();
 
-        // Get pet info before deletion and verify ownership
-        const getPetStmt = db.prepare(`
-            SELECT petid, name, breed, userid 
-            FROM pet 
-            WHERE petid = ?
-        `);
-        
-        const pet = getPetStmt.get(petId);
+            // Get pet info before deletion and verify ownership
+            const pet = await db.get(`
+                SELECT petid, name, breed, userid 
+                FROM pet 
+                WHERE petid = ?
+            `, [petId]);
 
-        if (!pet) {
-            db.exec('ROLLBACK');
-            return res.status(404).json({ message: 'Pet not found' });
-        }
+            if (!pet) {
+                await db.rollback();
+                return res.status(404).json({ message: 'Pet not found' });
+            }
 
-        if (pet.userid !== userId) {
-            db.exec('ROLLBACK');
-            return res.status(403).json({ 
-                message: 'Access denied. You can only delete your own pets.' 
-            });
-        }
+            if (pet.userid !== userId) {
+                await db.rollback();
+                return res.status(403).json({ 
+                    message: 'Access denied. You can only delete your own pets.' 
+                });
+            }
 
-        // Delete pet (CASCADE DELETE will handle related records)
-        const deletePetStmt = db.prepare(`DELETE FROM pet WHERE petid = ?`);
-        const result = deletePetStmt.run(petId);
+            // Delete pet (CASCADE DELETE will handle related records)
+            const result = await db.execute(`DELETE FROM pet WHERE petid = ?`, [petId]);
 
-        if (result.changes === 0) {
-            db.exec('ROLLBACK');
-            return res.status(404).json({ message: 'Pet not found or already deleted' });
-        }
+            if (result.affectedRows === 0) {
+                await db.rollback();
+                return res.status(404).json({ message: 'Pet not found or already deleted' });
+            }
 
-        db.exec('COMMIT');
+            await db.commit();
 
         console.log(`Pet deleted: ${pet.name} (${pet.breed}) by user ${userId}`);
 
-        res.status(200).json({
-            message: 'Pet deleted successfully',
-            deletedPet: {
-                id: pet.petid,
-                name: pet.name,
-                breed: pet.breed
-            }
-        });
+            console.log(`Pet deleted: ${pet.name} (${pet.breed}) by user ${userId}`);
 
-    } catch (err) {
-        console.error('Delete pet error:', err.message);
-        db.exec('ROLLBACK');
+            res.status(200).json({
+                message: 'Pet deleted successfully',
+                deletedPet: {
+                    id: pet.petid,
+                    name: pet.name,
+                    breed: pet.breed
+                }
+            });
+
+        } catch (err) {
+            console.error('Delete pet error:', err.message);
+            await db.rollback();
+            res.status(500).json({ message: 'Internal server error' });
+        }
+    } catch (error) {
+        console.error('Delete pet error:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
 });

@@ -1,5 +1,5 @@
 import express from 'express';
-import db from '../Database_sqlite.js';
+import db from '../db.js';
 import { validateTicketReply } from '../middleware/validationMiddleware.js';
 
 const router = express.Router();
@@ -24,12 +24,11 @@ router.post('/:ticketId/close', async (req, res) => {
         }
 
         // Check if the ticket exists and is in "solving" status
-        const getTicketStmt = db.prepare(`
+        const ticket = await db.get(`
             SELECT ticketid, status 
             FROM ticket 
             WHERE ticketid = ?
-        `);
-        const ticket = getTicketStmt.get(ticketId);
+        `, [ticketId]);
 
         if (!ticket) {
             return res.status(404).json({ message: 'Ticket not found' });
@@ -40,12 +39,11 @@ router.post('/:ticketId/close', async (req, res) => {
         }
 
         // Set status to 'finished'
-        const closeTicketStmt = db.prepare(`
+        await db.execute(`
             UPDATE ticket 
             SET status = 'finished'
             WHERE ticketid = ?
-        `);
-        closeTicketStmt.run(ticketId);
+        `, [ticketId]);
 
         res.status(200).json({
             message: 'Ticket closed successfully',
@@ -59,18 +57,17 @@ router.post('/:ticketId/close', async (req, res) => {
 });
 
 // Get all finished tickets for the authenticated user (archived = finished)
-router.get('/archived', (req, res) => {
+router.get('/archived', async (req, res) => {
     try {
         const userId = req.user.userid;
 
         // Fetch finished tickets where the user is the owner
-        const getArchivedTicketsStmt = db.prepare(`
+        const archivedTickets = await db.all(`
             SELECT ticketid, subject, description, status, response, attachment, createtime, assigntime, managerid
             FROM ticket
             WHERE userid = ? AND status = 'finished'
             ORDER BY assigntime DESC
-        `);
-        const archivedTickets = getArchivedTicketsStmt.all(userId);
+        `, [userId]);
 
         res.status(200).json({
             archivedTickets
@@ -82,7 +79,7 @@ router.get('/archived', (req, res) => {
 });
 
 // Open a ticket for a booking (Pet owner or Service provider)
-router.post('/booking/:bookingId/open', (req, res) => {
+router.post('/booking/:bookingId/open', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -101,22 +98,21 @@ router.post('/booking/:bookingId/open', (req, res) => {
         }
 
         // Check if the booking exists and belongs to the user (as owner or provider)
-        const getBookingStmt = db.prepare(`
+        const booking = await db.get(`
             SELECT bookid, poid, svid FROM booking WHERE bookid = ?
-        `);
-        const booking = getBookingStmt.get(bookingId);
+        `, [bookingId]);
 
         if (!booking) {
             return res.status(404).json({ message: 'Booking not found.' });
         }
         let serviceProvider = null;
         if (userRole === "Service provider") {
-            const getServiceProviderStmt = db.prepare(`
+            serviceProvider = await db.get(`
                 SELECT s.providerid FROM booking b
                 JOIN service s ON s.serviceid = b.svid
                 WHERE b.svid =?
-            `);
-        serviceProvider = getServiceProviderStmt.get(booking.svid);}
+            `, [booking.svid]);
+        }
 
         let serviceProviderId = null;
             if (serviceProvider) {
@@ -143,15 +139,14 @@ router.post('/booking/:bookingId/open', (req, res) => {
             }
         }
 
-        const insertTicketStmt = db.prepare(`
+        const result = await db.execute(`
             INSERT INTO ticket (userid, subject, description, attachment, status, bookingid)
             VALUES (?, ?, ?, ?, 'pending', ?)
-        `);
-        const result = insertTicketStmt.run(userId, subject, description, attachmentBuffer, bookingId);
+        `, [userId, subject, description, attachmentBuffer, bookingId]);
 
         res.status(201).json({
             message: 'Ticket opened successfully',
-            ticketId: result.lastInsertRowid,
+            ticketId: result.insertId,
             status: 'pending'
         });
     } catch (err) {
@@ -161,7 +156,7 @@ router.post('/booking/:bookingId/open', (req, res) => {
 });
 
 // Pet owner or service provider replies to a pending ticket (threaded reply)
-router.post('/:ticketId/reply-user', (req, res) => {
+router.post('/:ticketId/reply-user', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -176,7 +171,7 @@ router.post('/:ticketId/reply-user', (req, res) => {
         }
 
         // Check ticket exists and is pending, and belongs to user
-        const ticket = db.prepare(`SELECT * FROM ticket WHERE ticketid = ?`).get(ticketId);
+        const ticket = await db.get(`SELECT * FROM ticket WHERE ticketid = ?`, [ticketId]);
         if (!ticket) return res.status(404).json({ message: 'Ticket not found.' });
         if (ticket.status !== 'solving') {
             return res.status(400).json({ message: 'You can only reply to tickets in pending status.' });
@@ -185,10 +180,10 @@ router.post('/:ticketId/reply-user', (req, res) => {
             return res.status(403).json({ message: 'You do not have permission to reply to this ticket.' });
         }
 
-        db.prepare(`
+        await db.execute(`
             INSERT INTO ticketreply (ticketid, userid, role, message)
             VALUES (?, ?, ?, ?)
-        `).run(ticketId, userId, userRole, message);
+        `, [ticketId, userId, userRole, message]);
 
         res.status(201).json({ message: 'Reply sent successfully.' });
     } catch (err) {
@@ -198,7 +193,7 @@ router.post('/:ticketId/reply-user', (req, res) => {
 });
 
 // Manager initial reply to a pending ticket (moves to "solving" and sets response, managerid, assigntime)
-router.post('/:ticketId/reply', validateTicketReply, (req, res) => {
+router.post('/:ticketId/reply', validateTicketReply, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -217,12 +212,11 @@ router.post('/:ticketId/reply', validateTicketReply, (req, res) => {
         }
 
         // Check if the ticket exists and is in "pending" status
-        const getTicketStmt = db.prepare(`
+        const ticket = await db.get(`
             SELECT ticketid, status 
             FROM ticket 
             WHERE ticketid = ?
-        `);
-        const ticket = getTicketStmt.get(ticketId);
+        `, [ticketId]);
 
         if (!ticket) {
             return res.status(404).json({ message: 'Ticket not found' });
@@ -238,12 +232,11 @@ router.post('/:ticketId/reply', validateTicketReply, (req, res) => {
         }
 
         // Initial manager reply: update ticket, set status to solving
-        const updateTicketStmt = db.prepare(`
+        await db.execute(`
             UPDATE ticket 
             SET response = ?, status = 'solving', managerid = ?, assigntime = CURRENT_TIMESTAMP
             WHERE ticketid = ?
-        `);
-        updateTicketStmt.run(response, userId, ticketId);
+        `, [response, userId, ticketId]);
 
         return res.status(200).json({
             message: 'Ticket replied successfully',
@@ -258,7 +251,7 @@ router.post('/:ticketId/reply', validateTicketReply, (req, res) => {
 });
 
 // Manager replies to a solving ticket (threaded reply)
-router.post('/:ticketId/reply-manager', (req, res) => {
+router.post('/:ticketId/reply-manager', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -273,16 +266,16 @@ router.post('/:ticketId/reply-manager', (req, res) => {
         }
 
         // Check ticket exists and is in "solving" status
-        const ticket = db.prepare(`SELECT * FROM ticket WHERE ticketid = ?`).get(ticketId);
+        const ticket = await db.get(`SELECT * FROM ticket WHERE ticketid = ?`, [ticketId]);
         if (!ticket) return res.status(404).json({ message: 'Ticket not found.' });
         if (ticket.status !== 'solving') {
             return res.status(400).json({ message: 'You can only reply to tickets in solving status.' });
         }
 
-        db.prepare(`
+        await db.execute(`
             INSERT INTO ticketreply (ticketid, userid, role, message)
             VALUES (?, ?, ?, ?)
-        `).run(ticketId, userId, userRole, message);
+        `, [ticketId, userId, userRole, message]);
 
         return res.status(201).json({ message: 'Manager reply sent successfully.' });
     } catch (err) {
@@ -292,17 +285,17 @@ router.post('/:ticketId/reply-manager', (req, res) => {
 });
 
 // (Optional) Get all replies for a ticket
-router.get('/:ticketId/replies', (req, res) => {
+router.get('/:ticketId/replies', async (req, res) => {
     try {
         const ticketId = parseInt(req.params.ticketId);
         if (isNaN(ticketId)) return res.status(400).json({ message: 'Invalid ticket ID.' });
 
-        const replies = db.prepare(`
+        const replies = await db.all(`
             SELECT replyid, userid, role, message, created_at
             FROM ticketreply
             WHERE ticketid = ?
             ORDER BY created_at ASC
-        `).all(ticketId);
+        `, [ticketId]);
 
         res.status(200).json({ replies });
     } catch (err) {

@@ -2,7 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import db from '../Database_sqlite.js';
+import db from '../db.js';
 import { 
     validateRegistration, 
     validateLogin, 
@@ -40,7 +40,7 @@ router.post('/start-verification', validatePreVerificationRegistration, async (r
 
     try {
         // Check if email already exists
-        const emailExists = db.prepare('SELECT userid FROM users WHERE email = ?').get(email);
+        const emailExists = await db.get('SELECT userid FROM user WHERE email = ?', [email]);
         if (emailExists) {
             return res.status(400).json({
                 success: false,
@@ -53,9 +53,9 @@ router.post('/start-verification', validatePreVerificationRegistration, async (r
             let phoneExists = false;
             
             if (role === 'Pet owner') {
-                phoneExists = db.prepare('SELECT id FROM petowner WHERE phone = ?').get(phone);
+                phoneExists = await db.get('SELECT id FROM petowner WHERE phone = ?', [phone]);
             } else if (role === 'Service provider') {
-                phoneExists = db.prepare('SELECT id FROM serviceprovider WHERE phone = ?').get(phone);
+                phoneExists = await db.get('SELECT id FROM serviceprovider WHERE phone = ?', [phone]);
             }
             
             if (phoneExists) {
@@ -186,7 +186,7 @@ router.post('/complete-registration', validateCompleteRegistration, async (req, 
         const { username, email, password, gender, role, phone, city, address, business_name, description, website } = registrationData;
 
         // Double-check email doesn't exist (race condition protection)
-        const emailExists = db.prepare('SELECT userid FROM users WHERE email = ?').get(email);
+        const emailExists = await db.get('SELECT userid FROM user WHERE email = ?', [email]);
         if (emailExists) {
             preVerificationService.removePendingRegistration(sessionId);
             return res.status(400).json({
@@ -200,39 +200,29 @@ router.post('/complete-registration', validateCompleteRegistration, async (req, 
         const hashedPassword = await bcrypt.hash(password, saltRounds);
 
         // Create user account (with verified status)
-        const insertUser = db.prepare(`
-            INSERT INTO users (name, email, password, gender, role, email_verified)
-            VALUES (?, ?, ?, ?, ?, 1)
-        `);
+        const result = await db.execute(`
+            INSERT INTO user (name, email, password, gender, role, email_verified)
+            VALUES (?, ?, ?, ?, ?, '1')
+        `, [username, email, hashedPassword, gender, role]);
         
-        const result = insertUser.run(
-            username, 
-            email, 
-            hashedPassword, 
-            gender, 
-            role
-        );
-        const userId = result.lastInsertRowid;
+        const userId = result.insertId;
 
         // Insert role-specific data
         if (role === 'Pet owner') {
-            const insertPetOwner = db.prepare(`
+            await db.execute(`
                 INSERT INTO petowner (id, phone, city, address)
                 VALUES (?, ?, ?, ?)
-            `);
-            insertPetOwner.run(userId, phone || null, city || null, address || null);
+            `, [userId, phone || null, city || null, address || null]);
         } else if (role === 'Service provider') {
-            const insertServiceProvider = db.prepare(`
+            await db.execute(`
                 INSERT INTO serviceprovider (id, business_name, phone, description, address, website)
                 VALUES (?, ?, ?, ?, ?, ?)
-            `);
-            insertServiceProvider.run(userId, business_name || null, phone || null, description || null, address || null, website || null);
+            `, [userId, business_name || null, phone || null, description || null, address || null, website || null]);
         } else if (role === 'Manager') {
-            const insertManager = db.prepare(`
+            await db.execute(`
                 INSERT INTO manager (id)
                 VALUES (?)
-            `);
-            insertManager.run(userId);
+            `, [userId]);
         }
 
         // Generate JWT token with JTI for blacklisting support
@@ -384,7 +374,7 @@ router.post('/register', validateRegistration, async (req, res) => {
 
     try {
         // Check if email already exists
-        const emailExists = db.prepare('SELECT userid FROM users WHERE email = ?').get(email);
+        const emailExists = await db.get('SELECT userid FROM user WHERE email = ?', [email]);
         if (emailExists) {
             return res.status(400).json({
                 success: false,
@@ -395,10 +385,10 @@ router.post('/register', validateRegistration, async (req, res) => {
             let phoneExists = false;
             
             if (role === 'Pet owner') {
-                const petOwnerPhone = db.prepare('SELECT id FROM petowner WHERE phone = ?').get(phone);
+                const petOwnerPhone = await db.get('SELECT id FROM petowner WHERE phone = ?', [phone]);
                 phoneExists = petOwnerPhone !== undefined;
             } else if (role === 'Service provider') {
-                const providerPhone = db.prepare('SELECT id FROM serviceprovider WHERE phone = ?').get(phone);
+                const providerPhone = await db.get('SELECT id FROM serviceprovider WHERE phone = ?', [phone]);
                 phoneExists = providerPhone !== undefined;
             }
 
@@ -423,33 +413,29 @@ router.post('/register', validateRegistration, async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, saltRounds);
 
         // Insert user into database
-        const insertUser = db.prepare(`
-            INSERT INTO users (name, email, password, gender, role, email_verified)
-            VALUES (?, ?, ?, ?, ?, 0)
-        `);
+        const result = await db.execute(`
+            INSERT INTO user (name, email, password, gender, role, email_verified)
+            VALUES (?, ?, ?, ?, ?, '0')
+        `, [username, email, hashedPassword, gender, role]);
         
-        const result = insertUser.run(username, email, hashedPassword, gender, role);
-        const userId = result.lastInsertRowid;
+        const userId = result.insertId;
 
         // Insert role-specific data
         if (role === 'Pet owner') {
-            const insertPetOwner = db.prepare(`
+            await db.execute(`
                 INSERT INTO petowner (id, phone, city, address)
                 VALUES (?, ?, ?, ?)
-            `);
-            insertPetOwner.run(userId, phone || null, city || null, address || null);
+            `, [userId, phone || null, city || null, address || null]);
         } else if (role === 'Service provider') {
-            const insertServiceProvider = db.prepare(`
+            await db.execute(`
                 INSERT INTO serviceprovider (id, business_name, phone, description, address, website)
                 VALUES (?, ?, ?, ?, ?, ?)
-            `);
-            insertServiceProvider.run(userId, business_name || null, phone || null, description || null, address || null, website || null);
+            `, [userId, business_name || null, phone || null, description || null, address || null, website || null]);
         } else if (role === 'Manager') {
-            const insertManager = db.prepare(`
+            await db.execute(`
                 INSERT INTO manager (id)
                 VALUES (?)
-            `);
-            insertManager.run(userId);
+            `, [userId]);
         }
 
         // Generate JWT token with JTI for blacklisting support
@@ -502,11 +488,11 @@ router.post('/login', validateLogin, async (req, res) => {
 
     try {
         // Find user by email only (email is unique)
-        const user = db.prepare(`
+        const user = await db.get(`
             SELECT userid, name, email, password, role, email_verified 
-            FROM users 
+            FROM user 
             WHERE email = ?
-        `).get(email);
+        `, [email]);
 
         if (!user) {
             return res.status(401).json({
@@ -581,7 +567,7 @@ router.post('/verify-email', authMiddleware, validateVerificationCode, async (re
 
     try {
         // Get user's email
-        const user = db.prepare('SELECT email, email_verified FROM users WHERE userid = ?').get(userId);
+        const user = await db.get('SELECT email, email_verified FROM user WHERE userid = ?', [userId]);
         if (!user) {
             return res.status(404).json({
                 success: false,
@@ -607,8 +593,7 @@ router.post('/verify-email', authMiddleware, validateVerificationCode, async (re
         }
 
         // Update user's email verification status
-        const updateStmt = db.prepare('UPDATE users SET email_verified = 1 WHERE userid = ?');
-        updateStmt.run(userId);
+        await db.execute('UPDATE user SET email_verified = 1 WHERE userid = ?', [userId]);
 
         res.json({
             success: true,
@@ -632,7 +617,7 @@ router.post('/resend-email-verification', authMiddleware, async (req, res) => {
 
     try {
         // Get user data
-        const user = db.prepare('SELECT name, email, email_verified FROM users WHERE userid = ?').get(userId);
+        const user = await db.get('SELECT name, email, email_verified FROM user WHERE userid = ?', [userId]);
         if (!user) {
             return res.status(404).json({
                 success: false,
@@ -676,11 +661,11 @@ router.post('/resend-email-verification', authMiddleware, async (req, res) => {
 /**
  * Get verification status
  */
-router.get('/verification-status', authMiddleware, (req, res) => {
+router.get('/verification-status', authMiddleware, async (req, res) => {
     const userId = req.user.userid;
 
     try {
-        const user = db.prepare('SELECT email_verified FROM users WHERE userid = ?').get(userId);
+        const user = await db.get('SELECT email_verified FROM user WHERE userid = ?', [userId]);
         if (!user) {
             return res.status(404).json({
                 success: false,
@@ -714,7 +699,7 @@ router.post('/forgot-password', validateForgotPasswordRequest, async (req, res) 
 
     try {
         // Check if user exists with this email
-        const user = db.prepare('SELECT userid, name, email FROM users WHERE email = ?').get(email);
+        const user = await db.get('SELECT userid, name, email FROM user WHERE email = ?', [email]);
         
         if (!user) {
             // For security, don't reveal if email exists or not
@@ -779,7 +764,7 @@ router.post('/reset-password', validatePasswordReset, async (req, res) => {
         }
 
         // Get user details
-        const user = db.prepare('SELECT userid, name, email FROM users WHERE email = ?').get(email);
+        const user = await db.get('SELECT userid, name, email FROM user WHERE email = ?', [email]);
         
         if (!user) {
             return res.status(404).json({
@@ -801,9 +786,9 @@ router.post('/reset-password', validatePasswordReset, async (req, res) => {
         const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
 
         // Update the user's password
-        const updateResult = db.prepare('UPDATE users SET password = ? WHERE userid = ?').run(hashedPassword, user.userid);
+        const updateResult = await db.execute('UPDATE user SET password = ? WHERE userid = ?', [hashedPassword, user.userid]);
         
-        if (updateResult.changes === 0) {
+        if (updateResult.affectedRows === 0) {
             return res.status(500).json({
                 success: false,
                 error: 'Failed to update password'
@@ -835,7 +820,7 @@ router.post('/resend-password-reset', validateForgotPasswordRequest, async (req,
 
     try {
         // Check if user exists with this email
-        const user = db.prepare('SELECT userid, name, email FROM users WHERE email = ?').get(email);
+        const user = await db.get('SELECT userid, name, email FROM user WHERE email = ?', [email]);
         
         if (!user) {
             // For security, don't reveal if email exists or not
@@ -881,17 +866,16 @@ router.post('/resend-password-reset', validateForgotPasswordRequest, async (req,
  * Get current authenticated user info
  * Useful for confirming user identity before logout or for user profile display
  */
-router.get('/me', authMiddleware, (req, res) => {
+router.get('/me', authMiddleware, async (req, res) => {
     try {
         const userId = req.user.userid;
         
         // Get detailed user information from database
-        const getUserStmt = db.prepare(`
+        const user = await db.get(`
             SELECT userid, name, email, role, email_verified 
-            FROM users 
+            FROM user 
             WHERE userid = ?
-        `);
-        const user = getUserStmt.get(userId);
+        `, [userId]);
 
         if (!user) {
             return res.status(404).json({
@@ -1054,11 +1038,11 @@ router.post('/check-verification-status', validateLogin, async (req, res) => {
 
     try {
         // Find user by email or username
-        const user = db.prepare(`
+        const user = await db.get(`
             SELECT userid, name, email, role, email_verified, created_at
-            FROM users 
+            FROM user 
             WHERE email = ? OR name = ?
-        `).get(username, username);
+        `, [username, username]);
 
         if (!user) {
             return res.status(404).json({
@@ -1112,12 +1096,12 @@ router.get('/admin/incomplete-registrations', authMiddleware, async (req, res) =
         }
 
         // Get users who haven't completed email verification
-        const incompleteUsers = db.prepare(`
+        const incompleteUsers = await db.all(`
             SELECT userid, name, email, role, email_verified, created_at
-            FROM users 
+            FROM user 
             WHERE email_verified = 0
             ORDER BY created_at DESC
-        `).all();
+        `);
 
         const stats = {
             totalIncomplete: incompleteUsers.length,
@@ -1157,11 +1141,11 @@ router.post('/restart-verification', validateLogin, async (req, res) => {
 
     try {
         // Find user by email or username
-        const user = db.prepare(`
+        const user = await db.get(`
             SELECT userid, name, email, password, phone, role, email_verified 
-            FROM users 
+            FROM user 
             WHERE email = ? OR name = ?
-        `).get(username, username);
+        `, [username, username]);
 
         if (!user) {
             return res.status(404).json({
@@ -1253,7 +1237,7 @@ router.post('/admin/force-complete-verification', authMiddleware, async (req, re
         }
 
         // Check if user exists
-        const user = db.prepare('SELECT userid, name, email, email_verified FROM users WHERE userid = ?').get(userId);
+        const user = await db.get('SELECT userid, name, email, email_verified FROM user WHERE userid = ?', [userId]);
         if (!user) {
             return res.status(404).json({
                 success: false,
@@ -1262,13 +1246,11 @@ router.post('/admin/force-complete-verification', authMiddleware, async (req, re
         }
 
         // Update user verification status
-        const updateStmt = db.prepare(`
-            UPDATE users 
+        await db.execute(`
+            UPDATE user 
             SET email_verified = 1 
             WHERE userid = ?
-        `);
-        
-        updateStmt.run(userId);
+        `, [userId]);
 
         res.json({
             success: true,

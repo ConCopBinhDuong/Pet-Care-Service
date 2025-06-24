@@ -1,11 +1,11 @@
 import express from 'express'
-import db from '../Database_sqlite.js'
+import db from '../db.js'
 import { validateScheduleCreation, validateScheduleUpdate } from '../middleware/validationMiddleware.js'
 
 const router = express.Router();
 
 // Get all schedules for the authenticated pet owner
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -17,7 +17,7 @@ router.get('/', (req, res) => {
             });
         }
 
-        const getSchedulesStmt = db.prepare(`
+        const schedules = await db.all(`
             SELECT 
                 ps.petscheduleid, ps.startdate, ps.repeat_option, ps.hour, ps.minute,
                 ps.dietid, ps.activityid,
@@ -30,9 +30,7 @@ router.get('/', (req, res) => {
             LEFT JOIN pet p ON (d.petid = p.petid OR a.petid = p.petid)
             WHERE p.userid = ?
             ORDER BY ps.startdate ASC, ps.hour ASC, ps.minute ASC
-        `);
-        
-        const schedules = getSchedulesStmt.all(userId);
+        `, [userId]);
 
         res.status(200).json({
             message: 'All schedules retrieved successfully',
@@ -46,7 +44,7 @@ router.get('/', (req, res) => {
 });
 
 // Get schedules for a specific pet
-router.get('/pet/:petId', (req, res) => {
+router.get('/pet/:petId', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -64,10 +62,9 @@ router.get('/pet/:petId', (req, res) => {
         }
 
         // Verify that the pet belongs to the authenticated user
-        const checkPetOwnershipStmt = db.prepare(`
+        const pet = await db.get(`
             SELECT userid, name FROM pet WHERE petid = ?
-        `);
-        const pet = checkPetOwnershipStmt.get(petId);
+        `, [petId]);
 
         if (!pet) {
             return res.status(404).json({ message: 'Pet not found' });
@@ -79,7 +76,7 @@ router.get('/pet/:petId', (req, res) => {
             });
         }
 
-        const getSchedulesStmt = db.prepare(`
+        const schedules = await db.all(`
             SELECT 
                 ps.petscheduleid, ps.startdate, ps.repeat_option, ps.hour, ps.minute,
                 ps.dietid, ps.activityid,
@@ -90,9 +87,7 @@ router.get('/pet/:petId', (req, res) => {
             LEFT JOIN activity a ON ps.activityid = a.activityid
             WHERE (d.petid = ? OR a.petid = ?)
             ORDER BY ps.startdate ASC, ps.hour ASC, ps.minute ASC
-        `);
-        
-        const schedules = getSchedulesStmt.all(petId, petId);
+        `, [petId, petId]);
 
         res.status(200).json({
             message: `Schedules for ${pet.name} retrieved successfully`,
@@ -110,7 +105,7 @@ router.get('/pet/:petId', (req, res) => {
 });
 
 // Add a new schedule for a diet or activity
-router.post('/', validateScheduleCreation, (req, res) => {
+router.post('/', validateScheduleCreation, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -134,25 +129,23 @@ router.post('/', validateScheduleCreation, (req, res) => {
 
         // Verify ownership of diet or activity
         if (dietid) {
-            const checkDietOwnershipStmt = db.prepare(`
+            pet = await db.get(`
                 SELECT p.userid, p.name, d.name as diet_name
                 FROM diet d
                 JOIN pet p ON d.petid = p.petid
                 WHERE d.dietid = ?
-            `);
-            pet = checkDietOwnershipStmt.get(dietid);
+            `, [dietid]);
             
             if (!pet) {
                 return res.status(404).json({ message: 'Diet not found' });
             }
         } else {
-            const checkActivityOwnershipStmt = db.prepare(`
+            pet = await db.get(`
                 SELECT p.userid, p.name, a.name as activity_name
                 FROM activity a
                 JOIN pet p ON a.petid = p.petid
                 WHERE a.activityid = ?
-            `);
-            pet = checkActivityOwnershipStmt.get(activityid);
+            `, [activityid]);
             
             if (!pet) {
                 return res.status(404).json({ message: 'Activity not found' });
@@ -166,56 +159,56 @@ router.post('/', validateScheduleCreation, (req, res) => {
         }
 
         // Start transaction
-        db.exec('BEGIN TRANSACTION');
+        const connection = await db.beginTransaction();
+        try {
+            // Insert new schedule
+            const result = await connection.execute(`
+                INSERT INTO petschedule (startdate, repeat_option, hour, minute, dietid, activityid)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `, [
+                startdate,
+                repeat_option,
+                hour,
+                minute,
+                dietid || null,
+                activityid || null
+            ]);
 
-        // Insert new schedule
-        const insertScheduleStmt = db.prepare(`
-            INSERT INTO petschedule (startdate, repeat_option, hour, minute, dietid, activityid)
-            VALUES (?, ?, ?, ?, ?, ?)
-        `);
+            // Get the newly created schedule
+            const newSchedule = await connection.get(`
+                SELECT 
+                    ps.petscheduleid, ps.startdate, ps.repeat_option, ps.hour, ps.minute,
+                    ps.dietid, ps.activityid,
+                    d.name as diet_name, d.amount as diet_amount,
+                    a.name as activity_name,
+                    p.name as pet_name
+                FROM petschedule ps
+                LEFT JOIN diet d ON ps.dietid = d.dietid
+                LEFT JOIN activity a ON ps.activityid = a.activityid
+                LEFT JOIN pet p ON (d.petid = p.petid OR a.petid = p.petid)
+                WHERE ps.petscheduleid = ?
+            `, [result.insertId]);
 
-        const result = insertScheduleStmt.run(
-            startdate,
-            repeat_option,
-            hour,
-            minute,
-            dietid || null,
-            activityid || null
-        );
+            await connection.commit();
 
-        db.exec('COMMIT');
+            res.status(201).json({
+                message: 'Schedule added successfully',
+                schedule: newSchedule
+            });
 
-        // Get the newly created schedule
-        const getNewScheduleStmt = db.prepare(`
-            SELECT 
-                ps.petscheduleid, ps.startdate, ps.repeat_option, ps.hour, ps.minute,
-                ps.dietid, ps.activityid,
-                d.name as diet_name, d.amount as diet_amount,
-                a.name as activity_name,
-                p.name as pet_name
-            FROM petschedule ps
-            LEFT JOIN diet d ON ps.dietid = d.dietid
-            LEFT JOIN activity a ON ps.activityid = a.activityid
-            LEFT JOIN pet p ON (d.petid = p.petid OR a.petid = p.petid)
-            WHERE ps.petscheduleid = ?
-        `);
-        
-        const newSchedule = getNewScheduleStmt.get(result.lastInsertRowid);
-
-        res.status(201).json({
-            message: 'Schedule added successfully',
-            schedule: newSchedule
-        });
+        } catch (transactionError) {
+            await connection.rollback();
+            throw transactionError;
+        }
 
     } catch (err) {
         console.error('Add schedule error:', err.message);
-        db.exec('ROLLBACK');
         res.status(500).json({ message: 'Internal server error' });
     }
 });
 
 // Get a specific schedule by ID
-router.get('/:scheduleId', (req, res) => {
+router.get('/:scheduleId', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -233,7 +226,7 @@ router.get('/:scheduleId', (req, res) => {
         }
 
         // Get schedule with pet ownership verification
-        const getScheduleStmt = db.prepare(`
+        const schedule = await db.get(`
             SELECT 
                 ps.petscheduleid, ps.startdate, ps.repeat_option, ps.hour, ps.minute,
                 ps.dietid, ps.activityid,
@@ -245,9 +238,7 @@ router.get('/:scheduleId', (req, res) => {
             LEFT JOIN activity a ON ps.activityid = a.activityid
             LEFT JOIN pet p ON (d.petid = p.petid OR a.petid = p.petid)
             WHERE ps.petscheduleid = ?
-        `);
-        
-        const schedule = getScheduleStmt.get(scheduleId);
+        `, [scheduleId]);
 
         if (!schedule) {
             return res.status(404).json({ message: 'Schedule not found' });
@@ -274,7 +265,7 @@ router.get('/:scheduleId', (req, res) => {
 });
 
 // Update a specific schedule
-router.put('/:scheduleId', validateScheduleUpdate, (req, res) => {
+router.put('/:scheduleId', validateScheduleUpdate, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -293,15 +284,14 @@ router.put('/:scheduleId', validateScheduleUpdate, (req, res) => {
         }
 
         // Verify schedule exists and belongs to user's pet
-        const getScheduleStmt = db.prepare(`
+        const schedule = await db.get(`
             SELECT ps.petscheduleid, p.userid
             FROM petschedule ps
             LEFT JOIN diet d ON ps.dietid = d.dietid
             LEFT JOIN activity a ON ps.activityid = a.activityid
             LEFT JOIN pet p ON (d.petid = p.petid OR a.petid = p.petid)
             WHERE ps.petscheduleid = ?
-        `);
-        const schedule = getScheduleStmt.get(scheduleId);
+        `, [scheduleId]);
 
         if (!schedule) {
             return res.status(404).json({ message: 'Schedule not found' });
@@ -312,9 +302,6 @@ router.put('/:scheduleId', validateScheduleUpdate, (req, res) => {
                 message: 'Access denied. You can only update schedules for your own pets.' 
             });
         }
-
-        // Start transaction
-        db.exec('BEGIN TRANSACTION');
 
         // Build update query
         const allowedFields = ['startdate', 'repeat_option', 'hour', 'minute'];
@@ -327,49 +314,52 @@ router.put('/:scheduleId', validateScheduleUpdate, (req, res) => {
         });
 
         if (Object.keys(scheduleUpdates).length === 0) {
-            db.exec('ROLLBACK');
             return res.status(400).json({ message: 'No valid fields to update' });
         }
 
-        const setClause = Object.keys(scheduleUpdates).map(key => `${key} = ?`).join(', ');
-        const values = Object.values(scheduleUpdates);
-        
-        const updateScheduleStmt = db.prepare(`UPDATE petschedule SET ${setClause} WHERE petscheduleid = ?`);
-        updateScheduleStmt.run(...values, scheduleId);
+        // Start transaction
+        const connection = await db.beginTransaction();
+        try {
+            const setClause = Object.keys(scheduleUpdates).map(key => `${key} = ?`).join(', ');
+            const values = Object.values(scheduleUpdates);
+            
+            await connection.execute(`UPDATE petschedule SET ${setClause} WHERE petscheduleid = ?`, [...values, scheduleId]);
 
-        db.exec('COMMIT');
+            // Get updated schedule
+            const updatedSchedule = await connection.get(`
+                SELECT 
+                    ps.petscheduleid, ps.startdate, ps.repeat_option, ps.hour, ps.minute,
+                    ps.dietid, ps.activityid,
+                    d.name as diet_name, d.amount as diet_amount,
+                    a.name as activity_name,
+                    p.name as pet_name
+                FROM petschedule ps
+                LEFT JOIN diet d ON ps.dietid = d.dietid
+                LEFT JOIN activity a ON ps.activityid = a.activityid
+                LEFT JOIN pet p ON (d.petid = p.petid OR a.petid = p.petid)
+                WHERE ps.petscheduleid = ?
+            `, [scheduleId]);
 
-        // Get updated schedule
-        const getUpdatedScheduleStmt = db.prepare(`
-            SELECT 
-                ps.petscheduleid, ps.startdate, ps.repeat_option, ps.hour, ps.minute,
-                ps.dietid, ps.activityid,
-                d.name as diet_name, d.amount as diet_amount,
-                a.name as activity_name,
-                p.name as pet_name
-            FROM petschedule ps
-            LEFT JOIN diet d ON ps.dietid = d.dietid
-            LEFT JOIN activity a ON ps.activityid = a.activityid
-            LEFT JOIN pet p ON (d.petid = p.petid OR a.petid = p.petid)
-            WHERE ps.petscheduleid = ?
-        `);
-        
-        const updatedSchedule = getUpdatedScheduleStmt.get(scheduleId);
+            await connection.commit();
 
-        res.status(200).json({
-            message: 'Schedule updated successfully',
-            schedule: updatedSchedule
-        });
+            res.status(200).json({
+                message: 'Schedule updated successfully',
+                schedule: updatedSchedule
+            });
+
+        } catch (transactionError) {
+            await connection.rollback();
+            throw transactionError;
+        }
 
     } catch (err) {
         console.error('Update schedule error:', err.message);
-        db.exec('ROLLBACK');
         res.status(500).json({ message: 'Internal server error' });
     }
 });
 
 // Delete a specific schedule
-router.delete('/:scheduleId', (req, res) => {
+router.delete('/:scheduleId', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -387,62 +377,63 @@ router.delete('/:scheduleId', (req, res) => {
         }
 
         // Start transaction
-        db.exec('BEGIN TRANSACTION');
+        const connection = await db.beginTransaction();
+        try {
+            // Get schedule info before deletion and verify ownership
+            const schedule = await connection.get(`
+                SELECT 
+                    ps.petscheduleid, ps.startdate, ps.hour, ps.minute,
+                    d.name as diet_name, a.name as activity_name,
+                    p.userid, p.name as pet_name
+                FROM petschedule ps
+                LEFT JOIN diet d ON ps.dietid = d.dietid
+                LEFT JOIN activity a ON ps.activityid = a.activityid
+                LEFT JOIN pet p ON (d.petid = p.petid OR a.petid = p.petid)
+                WHERE ps.petscheduleid = ?
+            `, [scheduleId]);
 
-        // Get schedule info before deletion and verify ownership
-        const getScheduleStmt = db.prepare(`
-            SELECT 
-                ps.petscheduleid, ps.startdate, ps.hour, ps.minute,
-                d.name as diet_name, a.name as activity_name,
-                p.userid, p.name as pet_name
-            FROM petschedule ps
-            LEFT JOIN diet d ON ps.dietid = d.dietid
-            LEFT JOIN activity a ON ps.activityid = a.activityid
-            LEFT JOIN pet p ON (d.petid = p.petid OR a.petid = p.petid)
-            WHERE ps.petscheduleid = ?
-        `);
-        
-        const schedule = getScheduleStmt.get(scheduleId);
-
-        if (!schedule) {
-            db.exec('ROLLBACK');
-            return res.status(404).json({ message: 'Schedule not found' });
-        }
-
-        if (schedule.userid !== userId) {
-            db.exec('ROLLBACK');
-            return res.status(403).json({ 
-                message: 'Access denied. You can only delete schedules for your own pets.' 
-            });
-        }
-
-        // Delete schedule
-        const deleteScheduleStmt = db.prepare(`DELETE FROM petschedule WHERE petscheduleid = ?`);
-        const result = deleteScheduleStmt.run(scheduleId);
-
-        if (result.changes === 0) {
-            db.exec('ROLLBACK');
-            return res.status(404).json({ message: 'Schedule not found or already deleted' });
-        }
-
-        db.exec('COMMIT');
-
-        const itemName = schedule.diet_name || schedule.activity_name;
-        console.log(`Schedule deleted: ${itemName} for pet ${schedule.pet_name} by user ${userId}`);
-
-        res.status(200).json({
-            message: 'Schedule deleted successfully',
-            deletedSchedule: {
-                id: schedule.petscheduleid,
-                item: itemName,
-                pet_name: schedule.pet_name,
-                time: `${schedule.hour}:${schedule.minute.toString().padStart(2, '0')}`
+            if (!schedule) {
+                await connection.rollback();
+                return res.status(404).json({ message: 'Schedule not found' });
             }
-        });
+
+            if (schedule.userid !== userId) {
+                await connection.rollback();
+                return res.status(403).json({ 
+                    message: 'Access denied. You can only delete schedules for your own pets.' 
+                });
+            }
+
+            // Delete schedule
+            const result = await connection.execute(`DELETE FROM petschedule WHERE petscheduleid = ?`, [scheduleId]);
+
+            if (result.affectedRows === 0) {
+                await connection.rollback();
+                return res.status(404).json({ message: 'Schedule not found or already deleted' });
+            }
+
+            await connection.commit();
+
+            const itemName = schedule.diet_name || schedule.activity_name;
+            console.log(`Schedule deleted: ${itemName} for pet ${schedule.pet_name} by user ${userId}`);
+
+            res.status(200).json({
+                message: 'Schedule deleted successfully',
+                deletedSchedule: {
+                    id: schedule.petscheduleid,
+                    item: itemName,
+                    pet_name: schedule.pet_name,
+                    time: `${schedule.hour}:${schedule.minute.toString().padStart(2, '0')}`
+                }
+            });
+
+        } catch (transactionError) {
+            await connection.rollback();
+            throw transactionError;
+        }
 
     } catch (err) {
         console.error('Delete schedule error:', err.message);
-        db.exec('ROLLBACK');
         res.status(500).json({ message: 'Internal server error' });
     }
 });

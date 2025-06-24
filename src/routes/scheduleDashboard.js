@@ -1,5 +1,5 @@
 import express from 'express';
-import db from '../Database_sqlite.js';
+import db from '../db.js';
 import authMiddleware from '../middleware/authMiddleware.js';
 
 const router = express.Router();
@@ -13,7 +13,7 @@ const router = express.Router();
  * GET /api/schedule/dashboard
  * Role: Pet Owner only
  */
-router.get('/dashboard', authMiddleware, (req, res) => {
+router.get('/dashboard', authMiddleware, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -78,24 +78,25 @@ router.get('/dashboard', authMiddleware, (req, res) => {
 
         query += ' ORDER BY b.servedate DESC, b.slot ASC';
 
-        const getAppointmentsStmt = db.prepare(query);
-        const appointments = getAppointmentsStmt.all(...params);
+        const appointments = await db.all(query, params);
 
         // Get pets for each appointment
-        const getPetsStmt = db.prepare(`
-            SELECT 
-                p.petid,
-                p.name as pet_name,
-                p.breed,
-                p.age
-            FROM booking_pet bp
-            JOIN pet p ON bp.petid = p.petid
-            WHERE bp.bookid = ?
-        `);
-
-        const appointmentsWithPets = appointments.map(appointment => ({
-            ...appointment,
-            pets: getPetsStmt.all(appointment.bookid)
+        const appointmentsWithPets = await Promise.all(appointments.map(async appointment => {
+            const pets = await db.all(`
+                SELECT 
+                    p.petid,
+                    p.name as pet_name,
+                    p.breed,
+                    p.age
+                FROM booking_pet bp
+                JOIN pet p ON bp.petid = p.petid
+                WHERE bp.bookid = ?
+            `, [appointment.bookid]);
+            
+            return {
+                ...appointment,
+                pets: pets
+            };
         }));
 
         // Calculate statistics
@@ -145,7 +146,7 @@ router.get('/dashboard', authMiddleware, (req, res) => {
  * GET /api/schedule/weekly
  * Role: Pet Owner only
  */
-router.get('/weekly', authMiddleware, (req, res) => {
+router.get('/weekly', authMiddleware, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -172,7 +173,7 @@ router.get('/weekly', authMiddleware, (req, res) => {
         const endDate = new Date(startDate);
         endDate.setDate(startDate.getDate() + 6); // End on Saturday
 
-        const getWeeklyAppointmentsStmt = db.prepare(`
+        const weeklyAppointments = await db.all(`
             SELECT 
                 b.bookid,
                 b.servedate,
@@ -190,28 +191,28 @@ router.get('/weekly', authMiddleware, (req, res) => {
             JOIN serviceprovider sp ON s.providerid = sp.id
             WHERE b.poid = ? AND b.servedate BETWEEN ? AND ?
             ORDER BY b.servedate ASC, b.slot ASC
-        `);
-
-        const weeklyAppointments = getWeeklyAppointmentsStmt.all(
+        `, [
             userId, 
             startDate.toISOString().split('T')[0], 
             endDate.toISOString().split('T')[0]
-        );
+        ]);
 
         // Get pets for each appointment
-        const getPetsStmt = db.prepare(`
-            SELECT 
-                p.petid,
-                p.name as pet_name,
-                p.breed
-            FROM booking_pet bp
-            JOIN pet p ON bp.petid = p.petid
-            WHERE bp.bookid = ?
-        `);
-
-        const appointmentsWithPets = weeklyAppointments.map(appointment => ({
-            ...appointment,
-            pets: getPetsStmt.all(appointment.bookid)
+        const appointmentsWithPets = await Promise.all(weeklyAppointments.map(async appointment => {
+            const pets = await db.all(`
+                SELECT 
+                    p.petid,
+                    p.name as pet_name,
+                    p.breed
+                FROM booking_pet bp
+                JOIN pet p ON bp.petid = p.petid
+                WHERE bp.bookid = ?
+            `, [appointment.bookid]);
+            
+            return {
+                ...appointment,
+                pets: pets
+            };
         }));
 
         // Group appointments by day
@@ -260,7 +261,7 @@ router.get('/weekly', authMiddleware, (req, res) => {
  * GET /api/schedule/today
  * Role: Pet Owner only
  */
-router.get('/today', authMiddleware, (req, res) => {
+router.get('/today', authMiddleware, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -273,7 +274,7 @@ router.get('/today', authMiddleware, (req, res) => {
 
         const today = new Date().toISOString().split('T')[0];
 
-        const getTodayAppointmentsStmt = db.prepare(`
+        const todayAppointments = await db.all(`
             SELECT 
                 b.bookid,
                 b.slot,
@@ -292,24 +293,24 @@ router.get('/today', authMiddleware, (req, res) => {
             JOIN serviceprovider sp ON s.providerid = sp.id
             WHERE b.poid = ? AND b.servedate = ?
             ORDER BY b.slot ASC
-        `);
-
-        const todayAppointments = getTodayAppointmentsStmt.all(userId, today);
+        `, [userId, today]);
 
         // Get pets for each appointment
-        const getPetsStmt = db.prepare(`
-            SELECT 
-                p.petid,
-                p.name as pet_name,
-                p.breed
-            FROM booking_pet bp
-            JOIN pet p ON bp.petid = p.petid
-            WHERE bp.bookid = ?
-        `);
-
-        const appointmentsWithPets = todayAppointments.map(appointment => ({
-            ...appointment,
-            pets: getPetsStmt.all(appointment.bookid)
+        const appointmentsWithPets = await Promise.all(todayAppointments.map(async appointment => {
+            const pets = await db.all(`
+                SELECT 
+                    p.petid,
+                    p.name as pet_name,
+                    p.breed
+                FROM booking_pet bp
+                JOIN pet p ON bp.petid = p.petid
+                WHERE bp.bookid = ?
+            `, [appointment.bookid]);
+            
+            return {
+                ...appointment,
+                pets: pets
+            };
         }));
 
         // Calculate today's statistics
@@ -346,7 +347,7 @@ router.get('/today', authMiddleware, (req, res) => {
  * GET /api/schedule/provider-dashboard
  * Role: Service Provider only
  */
-router.get('/provider-dashboard', authMiddleware, (req, res) => {
+router.get('/provider-dashboard', authMiddleware, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -410,24 +411,25 @@ router.get('/provider-dashboard', authMiddleware, (req, res) => {
 
         query += ' ORDER BY b.servedate DESC, b.slot ASC';
 
-        const getWorkScheduleStmt = db.prepare(query);
-        const workAppointments = getWorkScheduleStmt.all(...params);
+        const workAppointments = await db.all(query, params);
 
         // Get pets for each appointment
-        const getPetsStmt = db.prepare(`
-            SELECT 
-                p.petid,
-                p.name as pet_name,
-                p.breed,
-                p.age
-            FROM booking_pet bp
-            JOIN pet p ON bp.petid = p.petid
-            WHERE bp.bookid = ?
-        `);
-
-        const appointmentsWithPets = workAppointments.map(appointment => ({
-            ...appointment,
-            pets: getPetsStmt.all(appointment.bookid)
+        const appointmentsWithPets = await Promise.all(workAppointments.map(async appointment => {
+            const pets = await db.all(`
+                SELECT 
+                    p.petid,
+                    p.name as pet_name,
+                    p.breed,
+                    p.age
+                FROM booking_pet bp
+                JOIN pet p ON bp.petid = p.petid
+                WHERE bp.bookid = ?
+            `, [appointment.bookid]);
+            
+            return {
+                ...appointment,
+                pets: pets
+            };
         }));
 
         // Calculate work statistics
@@ -494,7 +496,7 @@ router.get('/provider-dashboard', authMiddleware, (req, res) => {
  * GET /api/schedule/monthly
  * Role: Service Provider only
  */
-router.get('/monthly', authMiddleware, (req, res) => {
+router.get('/monthly', authMiddleware, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -516,7 +518,7 @@ router.get('/monthly', authMiddleware, (req, res) => {
         const startDate = new Date(targetYear, targetMonth - 1, 1);
         const endDate = new Date(targetYear, targetMonth, 0); // Last day of the month
 
-        const getMonthlyAppointmentsStmt = db.prepare(`
+        const monthlyAppointments = await db.all(`
             SELECT 
                 b.bookid,
                 b.servedate,
@@ -535,28 +537,28 @@ router.get('/monthly', authMiddleware, (req, res) => {
             JOIN users u ON po.id = u.userid
             WHERE s.providerid = ? AND b.servedate BETWEEN ? AND ?
             ORDER BY b.servedate ASC, b.slot ASC
-        `);
-
-        const monthlyAppointments = getMonthlyAppointmentsStmt.all(
+        `, [
             userId, 
             startDate.toISOString().split('T')[0], 
             endDate.toISOString().split('T')[0]
-        );
+        ]);
 
         // Get pets for each appointment
-        const getPetsStmt = db.prepare(`
-            SELECT 
-                p.petid,
-                p.name as pet_name,
-                p.breed
-            FROM booking_pet bp
-            JOIN pet p ON bp.petid = p.petid
-            WHERE bp.bookid = ?
-        `);
-
-        const appointmentsWithPets = monthlyAppointments.map(appointment => ({
-            ...appointment,
-            pets: getPetsStmt.all(appointment.bookid)
+        const appointmentsWithPets = await Promise.all(monthlyAppointments.map(async appointment => {
+            const pets = await db.all(`
+                SELECT 
+                    p.petid,
+                    p.name as pet_name,
+                    p.breed
+                FROM booking_pet bp
+                JOIN pet p ON bp.petid = p.petid
+                WHERE bp.bookid = ?
+            `, [appointment.bookid]);
+            
+            return {
+                ...appointment,
+                pets: pets
+            };
         }));
 
         // Group appointments by date
@@ -604,7 +606,7 @@ router.get('/monthly', authMiddleware, (req, res) => {
  * GET /api/schedule/provider-today
  * Role: Service Provider only
  */
-router.get('/provider-today', authMiddleware, (req, res) => {
+router.get('/provider-today', authMiddleware, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -617,7 +619,7 @@ router.get('/provider-today', authMiddleware, (req, res) => {
 
         const today = new Date().toISOString().split('T')[0];
 
-        const getTodayWorkStmt = db.prepare(`
+        const todayWork = await db.all(`
             SELECT 
                 b.bookid,
                 b.slot,
@@ -637,24 +639,24 @@ router.get('/provider-today', authMiddleware, (req, res) => {
             JOIN users u ON po.id = u.userid
             WHERE s.providerid = ? AND b.servedate = ?
             ORDER BY b.slot ASC
-        `);
-
-        const todayWork = getTodayWorkStmt.all(userId, today);
+        `, [userId, today]);
 
         // Get pets for each appointment
-        const getPetsStmt = db.prepare(`
-            SELECT 
-                p.petid,
-                p.name as pet_name,
-                p.breed
-            FROM booking_pet bp
-            JOIN pet p ON bp.petid = p.petid
-            WHERE bp.bookid = ?
-        `);
-
-        const workWithPets = todayWork.map(appointment => ({
-            ...appointment,
-            pets: getPetsStmt.all(appointment.bookid)
+        const workWithPets = await Promise.all(todayWork.map(async appointment => {
+            const pets = await db.all(`
+                SELECT 
+                    p.petid,
+                    p.name as pet_name,
+                    p.breed
+                FROM booking_pet bp
+                JOIN pet p ON bp.petid = p.petid
+                WHERE bp.bookid = ?
+            `, [appointment.bookid]);
+            
+            return {
+                ...appointment,
+                pets: pets
+            };
         }));
 
         // Calculate today's work statistics
@@ -694,7 +696,7 @@ router.get('/provider-today', authMiddleware, (req, res) => {
  * POST /api/schedule/create
  * Role: Pet Owner and Service Provider
  */
-router.post('/create', authMiddleware, (req, res) => {
+router.post('/create', authMiddleware, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -722,20 +724,18 @@ router.post('/create', authMiddleware, (req, res) => {
             });
         }
 
-        const createScheduleStmt = db.prepare(`
+        const result = await db.execute(`
             INSERT INTO schedule (scheduled_time, tittle, detail, userid)
             VALUES (?, ?, ?, ?)
-        `);
-
-        const result = createScheduleStmt.run(
+        `, [
             scheduled_time,
             title.trim(),
             detail ? detail.trim() : null,
             userId
-        );
+        ]);
 
         // Get the created schedule entry
-        const getScheduleStmt = db.prepare(`
+        const createdSchedule = await db.get(`
             SELECT 
                 scheduleid,
                 scheduled_time,
@@ -744,9 +744,7 @@ router.post('/create', authMiddleware, (req, res) => {
                 userid
             FROM schedule
             WHERE scheduleid = ?
-        `);
-
-        const createdSchedule = getScheduleStmt.get(result.lastInsertRowid);
+        `, [result.insertId]);
 
         res.status(201).json({
             message: 'Schedule entry created successfully',
@@ -766,7 +764,7 @@ router.post('/create', authMiddleware, (req, res) => {
  * GET /api/schedule/entries
  * Role: Pet Owner and Service Provider
  */
-router.get('/entries', authMiddleware, (req, res) => {
+router.get('/entries', authMiddleware, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -803,8 +801,7 @@ router.get('/entries', authMiddleware, (req, res) => {
 
         query += ' ORDER BY scheduled_time ASC';
 
-        const getScheduleEntriesStmt = db.prepare(query);
-        const scheduleEntries = getScheduleEntriesStmt.all(...params);
+        const scheduleEntries = await db.all(query, params);
 
         res.status(200).json({
             message: 'Schedule entries retrieved successfully',

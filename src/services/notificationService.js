@@ -1,4 +1,4 @@
-import db from '../Database_sqlite.js';
+import db from '../db.js';
 import moment from 'moment';
 
 class NotificationService {
@@ -9,22 +9,21 @@ class NotificationService {
     /**
      * Create a notification
      */
-    createNotification(userId, text, type = 'general', scheduleId = null, relatedId = null, scheduledTime = null) {
-    try {
+    async createNotification(userId, text, type = 'general', scheduleId = null, relatedId = null, scheduledTime = null) {
+        try {
+            console.log('createNotification params:', { userId, text, type, scheduleId, relatedId, scheduledTime });
 
-        const insertStmt = this.db.prepare(`
-            INSERT INTO notification (userid, text, type, schedule_id, related_id, scheduled_time, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        `);
-        console.log('createNotification params:', { userId, text, type, scheduleId, relatedId, scheduledTime });
-
-        const result = insertStmt.run(userId, text, type, scheduleId, relatedId, scheduledTime);
-        return { success: true, notificationId: result.lastInsertRowid };
-    } catch (error) {
-        console.error('Error creating notification:', error);
-        return { success: false, error: error.message };
+            const result = await this.db.execute(`
+                INSERT INTO notification (userid, text, type, schedule_id, related_id, scheduled_time, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, NOW())
+            `, [userId, text, type, scheduleId, relatedId, scheduledTime]);
+            
+            return { success: true, notificationId: result.insertId };
+        } catch (error) {
+            console.error('Error creating notification:', error);
+            return { success: false, error: error.message };
+        }
     }
-}
 
     /**
      * Notify service provider when their service is approved
@@ -93,14 +92,14 @@ class NotificationService {
     /**
      * Check and create pet schedule notifications
      */
-    checkPetSchedules() {
+    async checkPetSchedules() {
         try {
             const now = moment();
             const currentTime = now.format('HH:mm');
             const currentDate = now.format('YYYY-MM-DD');
 
             // Get all active schedules that should trigger notifications
-            const getSchedulesStmt = this.db.prepare(`
+            const schedules = await this.db.all(`
                 SELECT 
                     ps.petscheduleid, ps.startdate, ps.repeat_option, ps.hour, ps.minute,
                     ps.dietid, ps.activityid,
@@ -113,8 +112,6 @@ class NotificationService {
                 LEFT JOIN pet p ON (d.petid = p.petid OR a.petid = p.petid)
                 WHERE p.userid IS NOT NULL
             `);
-
-            const schedules = getSchedulesStmt.all();
             const notifications = [];
 
             for (const schedule of schedules) {
@@ -128,12 +125,12 @@ class NotificationService {
                     
                     if (shouldNotify) {
                         // Check if notification already sent today for this schedule
-                        const existingNotification = this.db.prepare(`
+                        const existingNotification = await this.db.get(`
                             SELECT notiid FROM notification 
                             WHERE userid = ? AND schedule_id = ? 
                             AND DATE(created_at) = DATE(?)
                             AND type IN ('diet', 'activity')
-                        `).get(schedule.userid, schedule.petscheduleid, currentDate);
+                        `, [schedule.userid, schedule.petscheduleid, currentDate]);
 
                         if (!existingNotification) {
                             let notificationText, notificationType;
@@ -203,7 +200,7 @@ class NotificationService {
     /**
      * Check for expired bookings and send notifications
      */
-    checkBookingStatus() {
+    async checkBookingStatus() {
         try {
             const results = {
                 expiredNotifications: 0,
@@ -211,7 +208,7 @@ class NotificationService {
             };
 
             // Check for expired booking requests (pending > 24 hours)
-            const expiredBookingsStmt = this.db.prepare(`
+            const expiredBookings = await this.db.all(`
                 SELECT 
                     b.bookid, b.poid, b.book_timestamp,
                     s.name as service_name,
@@ -224,14 +221,12 @@ class NotificationService {
                 AND datetime(b.book_timestamp, '+24 hours') <= datetime('now')
             `);
 
-            const expiredBookings = expiredBookingsStmt.all();
-
             for (const booking of expiredBookings) {
                 // Check if expiry notification already sent
-                const existingNotification = this.db.prepare(`
+                const existingNotification = await this.db.get(`
                     SELECT notiid FROM notification 
                     WHERE userid = ? AND related_id = ? AND type = 'booking_expired'
-                `).get(booking.poid, booking.bookid);
+                `, [booking.poid, booking.bookid]);
 
                 if (!existingNotification) {
                     this.notifyBookingExpired(
@@ -249,7 +244,7 @@ class NotificationService {
             // Check for booking reminders (confirmed bookings tomorrow)
             const tomorrow = moment().add(1, 'day').format('YYYY-MM-DD');
             
-            const upcomingBookingsStmt = this.db.prepare(`
+            const upcomingBookings = await this.db.all(`
                 SELECT 
                     b.bookid, b.poid,
                     s.name as service_name,
@@ -260,17 +255,15 @@ class NotificationService {
                 JOIN serviceprovider sp ON s.providerid = sp.id
                 WHERE b.status = 'confirmed'
                 AND DATE(b.servedate) = ?
-            `);
-
-            const upcomingBookings = upcomingBookingsStmt.all(tomorrow);
+            `, [tomorrow]);
 
             for (const booking of upcomingBookings) {
                 // Check if reminder already sent
-                const existingReminder = this.db.prepare(`
+                const existingReminder = await this.db.get(`
                     SELECT notiid FROM notification 
                     WHERE userid = ? AND related_id = ? AND type = 'booking_reminder'
                     AND DATE(created_at) = DATE('now')
-                `).get(booking.poid, booking.bookid);
+                `, [booking.poid, booking.bookid]);
 
                 if (!existingReminder) {
                     this.notifyBookingReminder(
@@ -296,7 +289,7 @@ class NotificationService {
     /**
      * Get notifications for a user with pagination
      */
-    getUserNotifications(userId, options = {}) {
+    async getUserNotifications(userId, options = {}) {
         try {
             const { 
                 page = 1, 
@@ -326,7 +319,7 @@ class NotificationService {
             query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
             params.push(limit, offset);
             
-            const notifications = this.db.prepare(query).all(...params);
+            const notifications = await this.db.all(query, params);
             
             // Get total count
             let countQuery = 'SELECT COUNT(*) as total FROM notification WHERE userid = ?';
@@ -341,7 +334,7 @@ class NotificationService {
                 countQuery += ' AND read_status = 0';
             }
             
-            const totalCount = this.db.prepare(countQuery).get(...countParams).total;
+            const totalCount = (await this.db.get(countQuery, countParams)).total;
             
             return {
                 success: true,
@@ -362,19 +355,17 @@ class NotificationService {
     /**
      * Mark notification as read
      */
-    markAsRead(notificationId, userId) {
+    async markAsRead(notificationId, userId) {
         try {
-            const updateStmt = this.db.prepare(`
+            const result = await this.db.execute(`
                 UPDATE notification 
                 SET read_status = 1 
                 WHERE notiid = ? AND userid = ?
-            `);
-            
-            const result = updateStmt.run(notificationId, userId);
+            `, [notificationId, userId]);
             
             return { 
-                success: result.changes > 0,
-                updated: result.changes > 0
+                success: result.affectedRows > 0,
+                updated: result.affectedRows > 0
             };
         } catch (error) {
             console.error('Error marking notification as read:', error);
@@ -385,19 +376,17 @@ class NotificationService {
     /**
      * Mark all notifications as read for a user
      */
-    markAllAsRead(userId) {
+    async markAllAsRead(userId) {
         try {
-            const updateStmt = this.db.prepare(`
+            const result = await this.db.execute(`
                 UPDATE notification 
                 SET read_status = 1 
                 WHERE userid = ? AND read_status = 0
-            `);
-            
-            const result = updateStmt.run(userId);
+            `, [userId]);
             
             return { 
                 success: true,
-                updatedCount: result.changes
+                updatedCount: result.affectedRows
             };
         } catch (error) {
             console.error('Error marking all notifications as read:', error);
@@ -408,18 +397,16 @@ class NotificationService {
     /**
      * Delete a notification
      */
-    deleteNotification(notificationId, userId) {
+    async deleteNotification(notificationId, userId) {
         try {
-            const deleteStmt = this.db.prepare(`
+            const result = await this.db.execute(`
                 DELETE FROM notification 
                 WHERE notiid = ? AND userid = ?
-            `);
-            
-            const result = deleteStmt.run(notificationId, userId);
+            `, [notificationId, userId]);
             
             return { 
-                success: result.changes > 0,
-                deleted: result.changes > 0
+                success: result.affectedRows > 0,
+                deleted: result.affectedRows > 0
             };
         } catch (error) {
             console.error('Error deleting notification:', error);
@@ -430,9 +417,9 @@ class NotificationService {
     /**
      * Get notification statistics for a user
      */
-    getNotificationStats(userId) {
+    async getNotificationStats(userId) {
         try {
-            const statsStmt = this.db.prepare(`
+            const stats = await this.db.get(`
                 SELECT 
                     COUNT(*) as total,
                     SUM(CASE WHEN read_status = 0 THEN 1 ELSE 0 END) as unread,
@@ -447,9 +434,7 @@ class NotificationService {
                     SUM(CASE WHEN type = 'booking_reminder' THEN 1 ELSE 0 END) as booking_reminder
                 FROM notification 
                 WHERE userid = ?
-            `);
-            
-            const stats = statsStmt.get(userId);
+            `, [userId]);
             
             return { success: true, stats };
         } catch (error) {
@@ -461,18 +446,16 @@ class NotificationService {
     /**
      * Clean up old notifications (older than 30 days)
      */
-    cleanupOldNotifications() {
+    async cleanupOldNotifications() {
         try {
-            const deleteStmt = this.db.prepare(`
+            const result = await this.db.execute(`
                 DELETE FROM notification 
                 WHERE datetime(created_at) < datetime('now', '-30 days')
             `);
             
-            const result = deleteStmt.run();
-            
             return { 
                 success: true,
-                deletedCount: result.changes
+                deletedCount: result.affectedRows
             };
         } catch (error) {
             console.error('Error cleaning up old notifications:', error);

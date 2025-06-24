@@ -1,11 +1,11 @@
 import express from 'express'
-import db from '../Database_sqlite.js'
+import db from '../db.js'
 import { validateReportCreation, validateReportUpdate } from '../middleware/validationMiddleware.js'
 
 const router = express.Router();
 
 // Get all reports for the authenticated pet owner (their reports)
-router.get('/my-reports', (req, res) => {
+router.get('/my-reports', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -17,7 +17,7 @@ router.get('/my-reports', (req, res) => {
             });
         }
 
-        const getMyReportsStmt = db.prepare(`
+        const reports = await db.all(`
             SELECT 
                 sr.bookid, sr.text, sr.image,
                 b.servedate, b.status as booking_status, b.book_timestamp,
@@ -31,9 +31,7 @@ router.get('/my-reports', (req, res) => {
             JOIN users u ON sp.id = u.userid
             WHERE b.poid = ?
             ORDER BY b.servedate DESC
-        `);
-        
-        const reports = getMyReportsStmt.all(userId);
+        `, [userId]);
 
         res.status(200).json({
             message: 'Your reports retrieved successfully',
@@ -47,7 +45,7 @@ router.get('/my-reports', (req, res) => {
 });
 
 // Get all reports for a specific service (for service providers to see their reports)
-router.get('/service/:serviceId', (req, res) => {
+router.get('/service/:serviceId', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -58,13 +56,12 @@ router.get('/service/:serviceId', (req, res) => {
         }
 
         // Check if service exists and get provider info
-        const getServiceStmt = db.prepare(`
+        const service = await db.get(`
             SELECT s.serviceid, s.name, s.providerid, sp.business_name
             FROM service s
             JOIN serviceprovider sp ON s.providerid = sp.id
             WHERE s.serviceid = ?
-        `);
-        const service = getServiceStmt.get(serviceId);
+        `, [serviceId]);
 
         if (!service) {
             return res.status(404).json({ message: 'Service not found' });
@@ -81,7 +78,7 @@ router.get('/service/:serviceId', (req, res) => {
             });
         }
 
-        const getServiceReportsStmt = db.prepare(`
+        const reports = await db.all(`
             SELECT 
                 sr.bookid, sr.text, sr.image,
                 b.servedate, b.book_timestamp, b.status as booking_status,
@@ -93,9 +90,7 @@ router.get('/service/:serviceId', (req, res) => {
             JOIN users u ON po.id = u.userid
             WHERE b.svid = ?
             ORDER BY b.servedate DESC
-        `);
-        
-        const reports = getServiceReportsStmt.all(serviceId);
+        `, [serviceId]);
 
         res.status(200).json({
             message: 'Service reports retrieved successfully',
@@ -117,7 +112,7 @@ router.get('/service/:serviceId', (req, res) => {
 });
 
 // Get reports for a specific service provider (all their services)
-router.get('/provider/:providerId', (req, res) => {
+router.get('/provider/:providerId', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -128,13 +123,12 @@ router.get('/provider/:providerId', (req, res) => {
         }
 
         // Check if provider exists
-        const getProviderStmt = db.prepare(`
+        const provider = await db.get(`
             SELECT sp.id, sp.business_name, u.name
             FROM serviceprovider sp
             JOIN users u ON sp.id = u.userid
             WHERE sp.id = ?
-        `);
-        const provider = getProviderStmt.get(providerId);
+        `, [providerId]);
 
         if (!provider) {
             return res.status(404).json({ message: 'Service provider not found' });
@@ -151,7 +145,7 @@ router.get('/provider/:providerId', (req, res) => {
             });
         }
 
-        const getProviderReportsStmt = db.prepare(`
+        const reports = await db.all(`
             SELECT 
                 sr.bookid, sr.text, sr.image,
                 b.servedate, b.book_timestamp, b.status as booking_status,
@@ -165,9 +159,7 @@ router.get('/provider/:providerId', (req, res) => {
             JOIN users u ON po.id = u.userid
             WHERE s.providerid = ?
             ORDER BY b.servedate DESC
-        `);
-        
-        const reports = getProviderReportsStmt.all(providerId);
+        `, [providerId]);
 
         // Group by service
         const serviceStats = {};
@@ -208,7 +200,7 @@ router.get('/provider/:providerId', (req, res) => {
 });
 
 // Create a new report for a booking
-router.post('/booking/:bookingId', validateReportCreation, (req, res) => {
+router.post('/booking/:bookingId', validateReportCreation, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -227,13 +219,12 @@ router.post('/booking/:bookingId', validateReportCreation, (req, res) => {
         }
 
         // Check if booking exists and belongs to the user
-        const getBookingStmt = db.prepare(`
+        const booking = await db.get(`
             SELECT b.bookid, b.poid, b.status, b.servedate, s.name as service_name
             FROM booking b
             JOIN service s ON b.svid = s.serviceid
             WHERE b.bookid = ?
-        `);
-        const booking = getBookingStmt.get(bookingId);
+        `, [bookingId]);
 
         if (!booking) {
             return res.status(404).json({ message: 'Booking not found' });
@@ -254,10 +245,9 @@ router.post('/booking/:bookingId', validateReportCreation, (req, res) => {
         }
 
         // Check if report already exists
-        const checkExistingReportStmt = db.prepare(`
+        const existingReport = await db.get(`
             SELECT bookid FROM service_report WHERE bookid = ?
-        `);
-        const existingReport = checkExistingReportStmt.get(bookingId);
+        `, [bookingId]);
 
         if (existingReport) {
             return res.status(409).json({ 
@@ -266,38 +256,40 @@ router.post('/booking/:bookingId', validateReportCreation, (req, res) => {
         }
 
         // Start transaction
-        db.exec('BEGIN TRANSACTION');
+        const connection = await db.beginTransaction();
+        try {
+            // Insert new report
+            await connection.execute(`
+                INSERT INTO service_report (bookid, text, image)
+                VALUES (?, ?, ?)
+            `, [bookingId, text, image || null]);
 
-        // Insert new report
-        const insertReportStmt = db.prepare(`
-            INSERT INTO service_report (bookid, text, image)
-            VALUES (?, ?, ?)
-        `);
+            await connection.commit();
 
-        insertReportStmt.run(bookingId, text, image || null);
+            res.status(201).json({
+                message: 'Service report created successfully',
+                report: {
+                    bookingId: bookingId,
+                    serviceName: booking.service_name,
+                    text: text,
+                    image: image,
+                    serviceDate: booking.servedate
+                }
+            });
 
-        db.exec('COMMIT');
-
-        res.status(201).json({
-            message: 'Service report created successfully',
-            report: {
-                bookingId: bookingId,
-                serviceName: booking.service_name,
-                text: text,
-                image: image,
-                serviceDate: booking.servedate
-            }
-        });
+        } catch (transactionError) {
+            await connection.rollback();
+            throw transactionError;
+        }
 
     } catch (err) {
         console.error('Create report error:', err.message);
-        db.exec('ROLLBACK');
         res.status(500).json({ message: 'Internal server error' });
     }
 });
 
 // Update an existing report
-router.put('/booking/:bookingId', validateReportUpdate, (req, res) => {
+router.put('/booking/:bookingId', validateReportUpdate, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -316,14 +308,13 @@ router.put('/booking/:bookingId', validateReportUpdate, (req, res) => {
         }
 
         // Check if report exists and belongs to the user
-        const getReportStmt = db.prepare(`
+        const report = await db.get(`
             SELECT sr.bookid, sr.text, sr.image, b.poid, s.name as service_name
             FROM service_report sr
             JOIN booking b ON sr.bookid = b.bookid
             JOIN service s ON b.svid = s.serviceid
             WHERE sr.bookid = ?
-        `);
-        const report = getReportStmt.get(bookingId);
+        `, [bookingId]);
 
         if (!report) {
             return res.status(404).json({ message: 'Service report not found' });
@@ -336,39 +327,41 @@ router.put('/booking/:bookingId', validateReportUpdate, (req, res) => {
         }
 
         // Start transaction
-        db.exec('BEGIN TRANSACTION');
+        const connection = await db.beginTransaction();
+        try {
+            // Update report
+            await connection.execute(`
+                UPDATE service_report 
+                SET text = ?, image = ?
+                WHERE bookid = ?
+            `, [text, image || null, bookingId]);
 
-        // Update report
-        const updateReportStmt = db.prepare(`
-            UPDATE service_report 
-            SET text = ?, image = ?
-            WHERE bookid = ?
-        `);
+            await connection.commit();
 
-        updateReportStmt.run(text, image || null, bookingId);
+            res.status(200).json({
+                message: 'Service report updated successfully',
+                report: {
+                    bookingId: bookingId,
+                    serviceName: report.service_name,
+                    text: text,
+                    image: image,
+                    previousText: report.text
+                }
+            });
 
-        db.exec('COMMIT');
-
-        res.status(200).json({
-            message: 'Service report updated successfully',
-            report: {
-                bookingId: bookingId,
-                serviceName: report.service_name,
-                text: text,
-                image: image,
-                previousText: report.text
-            }
-        });
+        } catch (transactionError) {
+            await connection.rollback();
+            throw transactionError;
+        }
 
     } catch (err) {
         console.error('Update report error:', err.message);
-        db.exec('ROLLBACK');
         res.status(500).json({ message: 'Internal server error' });
     }
 });
 
 // Delete a report
-router.delete('/booking/:bookingId', (req, res) => {
+router.delete('/booking/:bookingId', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -386,14 +379,13 @@ router.delete('/booking/:bookingId', (req, res) => {
         }
 
         // Check if report exists and belongs to the user
-        const getReportStmt = db.prepare(`
+        const report = await db.get(`
             SELECT sr.bookid, sr.text, sr.image, b.poid, s.name as service_name
             FROM service_report sr
             JOIN booking b ON sr.bookid = b.bookid
             JOIN service s ON b.svid = s.serviceid
             WHERE sr.bookid = ?
-        `);
-        const report = getReportStmt.get(bookingId);
+        `, [bookingId]);
 
         if (!report) {
             return res.status(404).json({ message: 'Service report not found' });
@@ -406,41 +398,43 @@ router.delete('/booking/:bookingId', (req, res) => {
         }
 
         // Start transaction
-        db.exec('BEGIN TRANSACTION');
+        const connection = await db.beginTransaction();
+        try {
+            // Delete report
+            const result = await connection.execute(`
+                DELETE FROM service_report WHERE bookid = ?
+            `, [bookingId]);
 
-        // Delete report
-        const deleteReportStmt = db.prepare(`
-            DELETE FROM service_report WHERE bookid = ?
-        `);
-
-        const result = deleteReportStmt.run(bookingId);
-
-        if (result.changes === 0) {
-            db.exec('ROLLBACK');
-            return res.status(404).json({ message: 'Service report not found or already deleted' });
-        }
-
-        db.exec('COMMIT');
-
-        res.status(200).json({
-            message: 'Service report deleted successfully',
-            deletedReport: {
-                bookingId: bookingId,
-                serviceName: report.service_name,
-                text: report.text,
-                image: report.image
+            if (result.affectedRows === 0) {
+                await connection.rollback();
+                return res.status(404).json({ message: 'Service report not found or already deleted' });
             }
-        });
+
+            await connection.commit();
+
+            res.status(200).json({
+                message: 'Service report deleted successfully',
+                deletedReport: {
+                    bookingId: bookingId,
+                    serviceName: report.service_name,
+                    text: report.text,
+                    image: report.image
+                }
+            });
+
+        } catch (transactionError) {
+            await connection.rollback();
+            throw transactionError;
+        }
 
     } catch (err) {
         console.error('Delete report error:', err.message);
-        db.exec('ROLLBACK');
         res.status(500).json({ message: 'Internal server error' });
     }
 });
 
 // Get a specific report by booking ID
-router.get('/booking/:bookingId', (req, res) => {
+router.get('/booking/:bookingId', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -450,7 +444,7 @@ router.get('/booking/:bookingId', (req, res) => {
             return res.status(400).json({ message: 'Invalid booking ID' });
         }
 
-        const getReportStmt = db.prepare(`
+        const report = await db.get(`
             SELECT 
                 sr.bookid, sr.text, sr.image,
                 b.poid, b.servedate, b.book_timestamp, b.status,
@@ -465,9 +459,7 @@ router.get('/booking/:bookingId', (req, res) => {
             JOIN users u_reporter ON b.poid = u_reporter.userid
             JOIN users u_provider ON sp.id = u_provider.userid
             WHERE sr.bookid = ?
-        `);
-        
-        const report = getReportStmt.get(bookingId);
+        `, [bookingId]);
 
         if (!report) {
             return res.status(404).json({ message: 'Service report not found' });
@@ -518,7 +510,7 @@ router.get('/booking/:bookingId', (req, res) => {
 });
 
 // Get reports summary for managers (admin endpoint)
-router.get('/admin/summary', (req, res) => {
+router.get('/admin/summary', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -531,13 +523,12 @@ router.get('/admin/summary', (req, res) => {
         }
 
         // Get total reports count
-        const getTotalReportsStmt = db.prepare(`
+        const totalReports = await db.get(`
             SELECT COUNT(*) as total_reports FROM service_report
         `);
-        const totalReports = getTotalReportsStmt.get();
 
         // Get reports by service provider
-        const getReportsByProviderStmt = db.prepare(`
+        const reportsByProvider = await db.all(`
             SELECT 
                 sp.id, sp.business_name,
                 COUNT(*) as report_count
@@ -548,10 +539,9 @@ router.get('/admin/summary', (req, res) => {
             GROUP BY sp.id, sp.business_name
             ORDER BY report_count DESC
         `);
-        const reportsByProvider = getReportsByProviderStmt.all();
 
         // Get recent reports
-        const getRecentReportsStmt = db.prepare(`
+        const recentReports = await db.all(`
             SELECT 
                 sr.bookid, sr.text,
                 b.servedate,
@@ -566,7 +556,6 @@ router.get('/admin/summary', (req, res) => {
             ORDER BY b.servedate DESC
             LIMIT 10
         `);
-        const recentReports = getRecentReportsStmt.all();
 
         res.status(200).json({
             message: 'Reports summary retrieved successfully',

@@ -1,11 +1,11 @@
 import express from 'express'
-import db from '../Database_sqlite.js'
+import db from '../db.js'
 import { validateDietCreation, validateDietUpdate } from '../middleware/validationMiddleware.js'
 
 const router = express.Router();
 
 // Get all diets for a specific pet
-router.get('/pet/:petId', (req, res) => {
+router.get('/pet/:petId', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -23,10 +23,9 @@ router.get('/pet/:petId', (req, res) => {
         }
 
         // Verify that the pet belongs to the authenticated user
-        const checkPetOwnershipStmt = db.prepare(`
+        const pet = await db.get(`
             SELECT userid FROM pet WHERE petid = ?
-        `);
-        const pet = checkPetOwnershipStmt.get(petId);
+        `, [petId]);
 
         if (!pet) {
             return res.status(404).json({ message: 'Pet not found' });
@@ -38,14 +37,12 @@ router.get('/pet/:petId', (req, res) => {
             });
         }
 
-        const getDietsStmt = db.prepare(`
+        const diets = await db.all(`
             SELECT dietid, name, amount, description, petid
             FROM diet 
             WHERE petid = ?
             ORDER BY name ASC
-        `);
-        
-        const diets = getDietsStmt.all(petId);
+        `, [petId]);
 
         res.status(200).json({
             message: 'Diets retrieved successfully',
@@ -60,7 +57,7 @@ router.get('/pet/:petId', (req, res) => {
 });
 
 // Get all diets for all pets of the authenticated user
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -72,15 +69,13 @@ router.get('/', (req, res) => {
             });
         }
 
-        const getDietsStmt = db.prepare(`
+        const diets = await db.all(`
             SELECT d.dietid, d.name, d.amount, d.description, d.petid, p.name as pet_name
             FROM diet d
             JOIN pet p ON d.petid = p.petid
             WHERE p.userid = ?
             ORDER BY p.name ASC, d.name ASC
-        `);
-        
-        const diets = getDietsStmt.all(userId);
+        `, [userId]);
 
         res.status(200).json({
             message: 'All diets retrieved successfully',
@@ -94,7 +89,7 @@ router.get('/', (req, res) => {
 });
 
 // Add a new diet for a specific pet
-router.post('/pet/:petId', validateDietCreation, (req, res) => {
+router.post('/pet/:petId', validateDietCreation, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -113,10 +108,9 @@ router.post('/pet/:petId', validateDietCreation, (req, res) => {
         }
 
         // Verify that the pet belongs to the authenticated user
-        const checkPetOwnershipStmt = db.prepare(`
+        const pet = await db.get(`
             SELECT userid FROM pet WHERE petid = ?
-        `);
-        const pet = checkPetOwnershipStmt.get(petId);
+        `, [petId]);
 
         if (!pet) {
             return res.status(404).json({ message: 'Pet not found' });
@@ -129,42 +123,43 @@ router.post('/pet/:petId', validateDietCreation, (req, res) => {
         }
 
         // Start transaction
-        db.exec('BEGIN TRANSACTION');
+        await db.beginTransaction();
 
-        // Insert new diet
-        const insertDietStmt = db.prepare(`
-            INSERT INTO diet (name, amount, description, petid)
-            VALUES (?, ?, ?, ?)
-        `);
+        try {
+            // Insert new diet
+            const result = await db.execute(`
+                INSERT INTO diet (name, amount, description, petid)
+                VALUES (?, ?, ?, ?)
+            `, [
+                name, 
+                amount || null,
+                description || null, 
+                petId
+            ]);
 
-        const result = insertDietStmt.run(
-            name, 
-            amount || null,
-            description || null, 
-            petId
-        );
+            await db.commit();
 
-        db.exec('COMMIT');
+            // Get the newly created diet
+            const newDiet = await db.get(`
+                SELECT dietid, name, amount, description, petid
+                FROM diet 
+                WHERE dietid = ?
+            `, [result.insertId]);
 
-        // Get the newly created diet
-        const getNewDietStmt = db.prepare(`
-            SELECT dietid, name, amount, description, petid
-            FROM diet 
-            WHERE dietid = ?
-        `);
-        
-        const newDiet = getNewDietStmt.get(result.lastInsertRowid);
+            res.status(201).json({
+                message: 'Diet added successfully',
+                diet: newDiet
+            });
 
-        res.status(201).json({
-            message: 'Diet added successfully',
-            diet: newDiet
-        });
+        } catch (transactionErr) {
+            await db.rollback();
+            throw transactionErr;
+        }
 
     } catch (err) {
         console.error('Add diet error:', err.message);
-        db.exec('ROLLBACK');
         
-        if (err.message.includes('UNIQUE constraint failed')) {
+        if (err.message.includes('UNIQUE constraint failed') || err.message.includes('Duplicate entry')) {
             return res.status(409).json({ message: 'Diet with this name already exists for this pet' });
         }
         
@@ -173,7 +168,7 @@ router.post('/pet/:petId', validateDietCreation, (req, res) => {
 });
 
 // Get a specific diet by ID
-router.get('/:dietId', (req, res) => {
+router.get('/:dietId', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -191,14 +186,12 @@ router.get('/:dietId', (req, res) => {
         }
 
         // Get diet and verify ownership through pet
-        const getDietStmt = db.prepare(`
+        const diet = await db.get(`
             SELECT d.dietid, d.name, d.amount, d.description, d.petid, p.userid, p.name as pet_name
             FROM diet d
             JOIN pet p ON d.petid = p.petid
             WHERE d.dietid = ?
-        `);
-        
-        const diet = getDietStmt.get(dietId);
+        `, [dietId]);
 
         if (!diet) {
             return res.status(404).json({ message: 'Diet not found' });
@@ -226,7 +219,7 @@ router.get('/:dietId', (req, res) => {
 });
 
 // Update a specific diet
-router.put('/:dietId', validateDietUpdate, (req, res) => {
+router.put('/:dietId', validateDietUpdate, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -245,13 +238,12 @@ router.put('/:dietId', validateDietUpdate, (req, res) => {
         }
 
         // Verify diet exists and belongs to user's pet
-        const getDietStmt = db.prepare(`
+        const diet = await db.get(`
             SELECT d.dietid, p.userid 
             FROM diet d
             JOIN pet p ON d.petid = p.petid
             WHERE d.dietid = ?
-        `);
-        const diet = getDietStmt.get(dietId);
+        `, [dietId]);
 
         if (!diet) {
             return res.status(404).json({ message: 'Diet not found' });
@@ -262,9 +254,6 @@ router.put('/:dietId', validateDietUpdate, (req, res) => {
                 message: 'Access denied. You can only update diets for your own pets.' 
             });
         }
-
-        // Start transaction
-        db.exec('BEGIN TRANSACTION');
 
         // Build update query
         const allowedFields = ['name', 'amount', 'description'];
@@ -277,41 +266,45 @@ router.put('/:dietId', validateDietUpdate, (req, res) => {
         });
 
         if (Object.keys(dietUpdates).length === 0) {
-            db.exec('ROLLBACK');
             return res.status(400).json({ message: 'No valid fields to update' });
         }
 
-        const setClause = Object.keys(dietUpdates).map(key => `${key} = ?`).join(', ');
-        const values = Object.values(dietUpdates);
-        
-        const updateDietStmt = db.prepare(`UPDATE diet SET ${setClause} WHERE dietid = ?`);
-        updateDietStmt.run(...values, dietId);
+        // Start transaction
+        await db.beginTransaction();
 
-        db.exec('COMMIT');
+        try {
+            const setClause = Object.keys(dietUpdates).map(key => `${key} = ?`).join(', ');
+            const values = Object.values(dietUpdates);
+            
+            await db.execute(`UPDATE diet SET ${setClause} WHERE dietid = ?`, [...values, dietId]);
 
-        // Get updated diet
-        const getUpdatedDietStmt = db.prepare(`
-            SELECT dietid, name, amount, description, petid
-            FROM diet 
-            WHERE dietid = ?
-        `);
-        
-        const updatedDiet = getUpdatedDietStmt.get(dietId);
+            await db.commit();
 
-        res.status(200).json({
-            message: 'Diet updated successfully',
-            diet: updatedDiet
-        });
+            // Get updated diet
+            const updatedDiet = await db.get(`
+                SELECT dietid, name, amount, description, petid
+                FROM diet 
+                WHERE dietid = ?
+            `, [dietId]);
+
+            res.status(200).json({
+                message: 'Diet updated successfully',
+                diet: updatedDiet
+            });
+
+        } catch (transactionErr) {
+            await db.rollback();
+            throw transactionErr;
+        }
 
     } catch (err) {
         console.error('Update diet error:', err.message);
-        db.exec('ROLLBACK');
         res.status(500).json({ message: 'Internal server error' });
     }
 });
 
 // Delete a specific diet
-router.delete('/:dietId', (req, res) => {
+router.delete('/:dietId', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -329,56 +322,58 @@ router.delete('/:dietId', (req, res) => {
         }
 
         // Start transaction
-        db.exec('BEGIN TRANSACTION');
+        await db.beginTransaction();
 
-        // Get diet info before deletion and verify ownership
-        const getDietStmt = db.prepare(`
-            SELECT d.dietid, d.name, d.amount, p.userid, p.name as pet_name
-            FROM diet d
-            JOIN pet p ON d.petid = p.petid
-            WHERE d.dietid = ?
-        `);
-        
-        const diet = getDietStmt.get(dietId);
+        try {
+            // Get diet info before deletion and verify ownership
+            const diet = await db.get(`
+                SELECT d.dietid, d.name, d.amount, p.userid, p.name as pet_name
+                FROM diet d
+                JOIN pet p ON d.petid = p.petid
+                WHERE d.dietid = ?
+            `, [dietId]);
 
-        if (!diet) {
-            db.exec('ROLLBACK');
-            return res.status(404).json({ message: 'Diet not found' });
-        }
-
-        if (diet.userid !== userId) {
-            db.exec('ROLLBACK');
-            return res.status(403).json({ 
-                message: 'Access denied. You can only delete diets for your own pets.' 
-            });
-        }
-
-        // Delete diet (CASCADE DELETE will handle related records)
-        const deleteDietStmt = db.prepare(`DELETE FROM diet WHERE dietid = ?`);
-        const result = deleteDietStmt.run(dietId);
-
-        if (result.changes === 0) {
-            db.exec('ROLLBACK');
-            return res.status(404).json({ message: 'Diet not found or already deleted' });
-        }
-
-        db.exec('COMMIT');
-
-        console.log(`Diet deleted: ${diet.name} for pet ${diet.pet_name} by user ${userId}`);
-
-        res.status(200).json({
-            message: 'Diet deleted successfully',
-            deletedDiet: {
-                id: diet.dietid,
-                name: diet.name,
-                amount: diet.amount,
-                pet_name: diet.pet_name
+            if (!diet) {
+                await db.rollback();
+                return res.status(404).json({ message: 'Diet not found' });
             }
-        });
+
+            if (diet.userid !== userId) {
+                await db.rollback();
+                return res.status(403).json({ 
+                    message: 'Access denied. You can only delete diets for your own pets.' 
+                });
+            }
+
+            // Delete diet (CASCADE DELETE will handle related records)
+            const result = await db.execute(`DELETE FROM diet WHERE dietid = ?`, [dietId]);
+
+            if (result.affectedRows === 0) {
+                await db.rollback();
+                return res.status(404).json({ message: 'Diet not found or already deleted' });
+            }
+
+            await db.commit();
+
+            console.log(`Diet deleted: ${diet.name} for pet ${diet.pet_name} by user ${userId}`);
+
+            res.status(200).json({
+                message: 'Diet deleted successfully',
+                deletedDiet: {
+                    id: diet.dietid,
+                    name: diet.name,
+                    amount: diet.amount,
+                    pet_name: diet.pet_name
+                }
+            });
+
+        } catch (transactionErr) {
+            await db.rollback();
+            throw transactionErr;
+        }
 
     } catch (err) {
         console.error('Delete diet error:', err.message);
-        db.exec('ROLLBACK');
         res.status(500).json({ message: 'Internal server error' });
     }
 });

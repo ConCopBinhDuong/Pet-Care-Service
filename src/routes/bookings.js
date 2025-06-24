@@ -1,12 +1,12 @@
 import express from 'express'
-import db from '../Database_sqlite.js'
+import db from '../db.js'
 import { validateBookingCreation, validateBookingUpdate } from '../middleware/validationMiddleware.js'
 import notificationService from '../services/notificationService.js'
 
 const router = express.Router();
 
 // Get all bookings for the authenticated pet owner
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -18,7 +18,7 @@ router.get('/', (req, res) => {
             });
         }
 
-        const getBookingsStmt = db.prepare(`
+        const bookings = await db.all(`
             SELECT 
                 b.bookid,
                 b.svid as serviceid,
@@ -38,13 +38,11 @@ router.get('/', (req, res) => {
             JOIN serviceprovider sp ON s.providerid = sp.id
             WHERE b.poid = ?
             ORDER BY b.servedate DESC, b.slot ASC
-        `);
-        
-        const bookings = getBookingsStmt.all(userId);
+        `, [userId]);
 
         // Get pets for each booking
         for (let booking of bookings) {
-            const getPetsStmt = db.prepare(`
+            booking.pets = await db.all(`
                 SELECT 
                     p.petid,
                     p.name as pet_name,
@@ -52,9 +50,7 @@ router.get('/', (req, res) => {
                 FROM booking_pet bp
                 JOIN pet p ON bp.petid = p.petid
                 WHERE bp.bookid = ?
-            `);
-            
-            booking.pets = getPetsStmt.all(booking.bookid);
+            `, [booking.bookid]);
         }
 
         res.status(200).json({
@@ -70,7 +66,7 @@ router.get('/', (req, res) => {
 });
 
 // Get booking details by ID
-router.get('/:bookingId', (req, res) => {
+router.get('/:bookingId', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -83,7 +79,7 @@ router.get('/:bookingId', (req, res) => {
             });
         }
 
-        const getBookingStmt = db.prepare(`
+        const booking = await db.get(`
             SELECT 
                 b.bookid,
                 b.svid as serviceid,
@@ -92,7 +88,7 @@ router.get('/:bookingId', (req, res) => {
                 s.duration,
                 s.description,
                 st.type as service_type,
-                sp.businessname as provider_name,
+                sp.business_name as provider_name,
                 sp.address as provider_address,
                 sp.phone as provider_phone,
                 b.slot,
@@ -105,10 +101,8 @@ router.get('/:bookingId', (req, res) => {
             JOIN servicetype st ON s.typeid = st.typeid
             JOIN serviceprovider sp ON s.providerid = sp.id
             WHERE b.bookid = ? AND b.poid = ?
-        `);
+        `, [bookingId, userId]);
         
-        const booking = getBookingStmt.get(bookingId, userId);
-
         if (!booking) {
             return res.status(404).json({ 
                 message: 'Booking not found or access denied' 
@@ -116,7 +110,7 @@ router.get('/:bookingId', (req, res) => {
         }
 
         // Get pets for the booking
-        const getPetsStmt = db.prepare(`
+        booking.pets = await db.all(`
             SELECT 
                 p.petid,
                 p.name as pet_name,
@@ -125,9 +119,7 @@ router.get('/:bookingId', (req, res) => {
             FROM booking_pet bp
             JOIN pet p ON bp.petid = p.petid
             WHERE bp.bookid = ?
-        `);
-        
-        booking.pets = getPetsStmt.all(bookingId);
+        `, [bookingId]);
 
         res.status(200).json({
             message: 'Booking details retrieved successfully',
@@ -142,7 +134,7 @@ router.get('/:bookingId', (req, res) => {
 });
 
 // Create a new service booking (Reserve service endpoint)
-router.post('/', validateBookingCreation, (req, res) => {
+router.post('/', validateBookingCreation, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -167,10 +159,9 @@ router.post('/', validateBookingCreation, (req, res) => {
         }
 
         // Verify the service exists
-        const getServiceStmt = db.prepare(`
+        const service = await db.get(`
             SELECT serviceid, name, price FROM service WHERE serviceid = ?
-        `);
-        const service = getServiceStmt.get(serviceid);
+        `, [serviceid]);
 
         if (!service) {
             return res.status(404).json({ 
@@ -179,10 +170,9 @@ router.post('/', validateBookingCreation, (req, res) => {
         }
 
         // Verify the time slot exists for this service
-        const getTimeSlotStmt = db.prepare(`
+        const timeSlot = await db.get(`
             SELECT serviceid, slot FROM timeslot WHERE serviceid = ? AND slot = ?
-        `);
-        const timeSlot = getTimeSlotStmt.get(serviceid, slot);
+        `, [serviceid, slot]);
 
         if (!timeSlot) {
             return res.status(400).json({ 
@@ -191,11 +181,10 @@ router.post('/', validateBookingCreation, (req, res) => {
         }
 
         // Check if the slot is already booked for the same date
-        const checkConflictStmt = db.prepare(`
+        const existingBooking = await db.get(`
             SELECT bookid FROM booking 
             WHERE svid = ? AND slot = ? AND servedate = ? AND status != 'cancelled'
-        `);
-        const existingBooking = checkConflictStmt.get(serviceid, slot, servedate);
+        `, [serviceid, slot, servedate]);
 
         if (existingBooking) {
             return res.status(409).json({ 
@@ -204,12 +193,10 @@ router.post('/', validateBookingCreation, (req, res) => {
         }
 
         // Verify all pets belong to the user
-        const verifyPetsStmt = db.prepare(`
-            SELECT petid FROM pet WHERE petid = ? AND userid = ?
-        `);
-
         for (let petId of petIds) {
-            const pet = verifyPetsStmt.get(petId, userId);
+            const pet = await db.get(`
+                SELECT petid FROM pet WHERE petid = ? AND userid = ?
+            `, [petId, userId]);
             if (!pet) {
                 return res.status(400).json({ 
                     message: `Pet with ID ${petId} not found or doesn't belong to you` 
@@ -219,40 +206,37 @@ router.post('/', validateBookingCreation, (req, res) => {
 
         let bookingId;
         try {
-            db.exec("BEGIN TRANSACTION");
+            await db.beginTransaction();
 
             // Create the booking
-            const createBookingStmt = db.prepare(`
+            const bookingResult = await db.execute(`
                 INSERT INTO booking (poid, svid, slot, servedate, payment_method, status)
                 VALUES (?, ?, ?, ?, ?, 'pending')
-            `);
-            const bookingResult = createBookingStmt.run(userId, serviceid, slot, servedate, payment_method);
-            bookingId = bookingResult.lastInsertRowid;
+            `, [userId, serviceid, slot, servedate, payment_method]);
+            bookingId = bookingResult.insertId;
 
             // Link pets to the booking
-            const linkPetStmt = db.prepare(`
-                INSERT INTO booking_pet (bookid, petid) VALUES (?, ?)
-            `);
             for (let petId of petIds) {
-                linkPetStmt.run(bookingId, petId);
+                await db.execute(`
+                    INSERT INTO booking_pet (bookid, petid) VALUES (?, ?)
+                `, [bookingId, petId]);
             }
 
-            db.exec("COMMIT");
+            await db.commit();
         } catch (err) {
-            db.exec("ROLLBACK");
+            await db.rollback();
             throw err;
         }
 
         // Send notification to service provider about new booking request
         try {
-            const getProviderStmt = db.prepare(`
+            const providerInfo = await db.get(`
                 SELECT s.providerid, sp.business_name, u.name as customer_name
                 FROM service s
                 JOIN serviceprovider sp ON s.providerid = sp.id
-                JOIN users u ON u.userid = ?
+                JOIN user u ON u.userid = ?
                 WHERE s.serviceid = ?
-            `);
-            const providerInfo = getProviderStmt.get(userId, serviceid);
+            `, [userId, serviceid]);
             
             if (providerInfo) {
                 notificationService.notifyNewBooking(
@@ -294,7 +278,7 @@ router.post('/', validateBookingCreation, (req, res) => {
 
 
 // Update booking status or details
-router.put('/:bookingId', validateBookingUpdate, (req, res) => {
+router.put('/:bookingId', validateBookingUpdate, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -309,10 +293,9 @@ router.put('/:bookingId', validateBookingUpdate, (req, res) => {
         }
 
         // Verify booking exists and belongs to user
-        const getBookingStmt = db.prepare(`
+        const booking = await db.get(`
             SELECT bookid, poid, status FROM booking WHERE bookid = ? AND poid = ?
-        `);
-        const booking = getBookingStmt.get(bookingId, userId);
+        `, [bookingId, userId]);
 
         if (!booking) {
             return res.status(404).json({ 
@@ -352,13 +335,11 @@ router.put('/:bookingId', validateBookingUpdate, (req, res) => {
 
         params.push(bookingId);
 
-        const updateBookingStmt = db.prepare(`
+        await db.execute(`
             UPDATE booking 
             SET ${updates.join(', ')} 
             WHERE bookid = ?
-        `);
-        
-        updateBookingStmt.run(...params);
+        `, params);
 
         res.status(200).json({
             message: 'Booking updated successfully'
@@ -373,7 +354,7 @@ router.put('/:bookingId', validateBookingUpdate, (req, res) => {
 });
 
 // Cancel a booking
-router.delete('/:bookingId', (req, res) => {
+router.delete('/:bookingId', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;;
@@ -387,10 +368,9 @@ router.delete('/:bookingId', (req, res) => {
         }
 
         // Verify booking exists and belongs to user
-        const getBookingStmt = db.prepare(`
+        const booking = await db.get(`
             SELECT bookid, poid, status FROM booking WHERE bookid = ? AND poid = ?
-        `);
-        const booking = getBookingStmt.get(bookingId, userId);
+        `, [bookingId, userId]);
 
         if (!booking) {
             return res.status(404).json({ 
@@ -411,11 +391,9 @@ router.delete('/:bookingId', (req, res) => {
         }
 
         // Update booking status to cancelled
-        const cancelBookingStmt = db.prepare(`
+        await db.execute(`
             UPDATE booking SET status = 'cancelled' WHERE bookid = ?
-        `);
-        
-        cancelBookingStmt.run(bookingId);
+        `, [bookingId]);
 
         res.status(200).json({
             message: 'Booking cancelled successfully'
@@ -438,7 +416,7 @@ router.delete('/:bookingId', (req, res) => {
  * GET /bookings/provider/requests
  * Role: Service Provider only
  */
-router.get('/provider/requests', (req, res) => {
+router.get('/provider/requests', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -474,7 +452,7 @@ router.get('/provider/requests', (req, res) => {
             JOIN service s ON b.svid = s.serviceid
             JOIN servicetype st ON s.typeid = st.typeid
             JOIN petowner po ON b.poid = po.id
-            JOIN users u ON po.id = u.userid
+            JOIN user u ON po.id = u.userid
             WHERE s.providerid = ?
         `;
 
@@ -503,12 +481,11 @@ router.get('/provider/requests', (req, res) => {
 
         query += ' ORDER BY b.book_timestamp DESC, b.servedate ASC, b.slot ASC';
 
-        const getBookingsStmt = db.prepare(query);
-        const bookings = getBookingsStmt.all(...params);
+        const bookings = await db.all(query, params);
 
         // Get pets for each booking
         for (let booking of bookings) {
-            const getPetsStmt = db.prepare(`
+            booking.pets = await db.all(`
                 SELECT 
                     p.petid,
                     p.name as pet_name,
@@ -518,9 +495,7 @@ router.get('/provider/requests', (req, res) => {
                 FROM booking_pet bp
                 JOIN pet p ON bp.petid = p.petid
                 WHERE bp.bookid = ?
-            `);
-            
-            booking.pets = getPetsStmt.all(booking.bookid);
+            `, [booking.bookid]);
 
             // Calculate hours since booking was made
             const bookingTime = new Date(booking.book_timestamp);
@@ -559,7 +534,7 @@ router.get('/provider/requests', (req, res) => {
  * GET /bookings/provider/requests/:bookingId
  * Role: Service Provider only
  */
-router.get('/provider/requests/:bookingId', (req, res) => {
+router.get('/provider/requests/:bookingId', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -572,7 +547,7 @@ router.get('/provider/requests/:bookingId', (req, res) => {
             });
         }
 
-        const getBookingStmt = db.prepare(`
+        const booking = await db.get(`
             SELECT 
                 b.bookid,
                 b.svid as serviceid,
@@ -595,11 +570,9 @@ router.get('/provider/requests/:bookingId', (req, res) => {
             JOIN service s ON b.svid = s.serviceid
             JOIN servicetype st ON s.typeid = st.typeid
             JOIN petowner po ON b.poid = po.id
-            JOIN users u ON po.id = u.userid
+            JOIN user u ON po.id = u.userid
             WHERE b.bookid = ? AND s.providerid = ?
-        `);
-        
-        const booking = getBookingStmt.get(bookingId, userId);
+        `, [bookingId, userId]);
 
         if (!booking) {
             return res.status(404).json({ 
@@ -608,7 +581,7 @@ router.get('/provider/requests/:bookingId', (req, res) => {
         }
 
         // Get pets for the booking
-        const getPetsStmt = db.prepare(`
+        booking.pets = await db.all(`
             SELECT 
                 p.petid,
                 p.name as pet_name,
@@ -619,9 +592,7 @@ router.get('/provider/requests/:bookingId', (req, res) => {
             FROM booking_pet bp
             JOIN pet p ON bp.petid = p.petid
             WHERE bp.bookid = ?
-        `);
-        
-        booking.pets = getPetsStmt.all(bookingId);
+        `, [bookingId]);
 
         // Calculate timing information
         const bookingTime = new Date(booking.book_timestamp);
@@ -630,7 +601,7 @@ router.get('/provider/requests/:bookingId', (req, res) => {
         booking.shouldAutoReject = booking.status === 'pending' && booking.hoursSinceBooking >= 24;
 
         // Check for conflicts with other bookings
-        const checkConflictsStmt = db.prepare(`
+        const conflicts = await db.all(`
             SELECT 
                 b2.bookid,
                 b2.svid as other_serviceid,
@@ -643,9 +614,7 @@ router.get('/provider/requests/:bookingId', (req, res) => {
             AND b2.slot = ? 
             AND b2.bookid != ?
             AND b2.status NOT IN ('cancelled', 'rejected')
-        `);
-
-        const conflicts = checkConflictsStmt.all(userId, booking.servedate, booking.slot, bookingId);
+        `, [userId, booking.servedate, booking.slot, bookingId]);
         booking.hasConflicts = conflicts.length > 0;
         booking.conflicts = conflicts;
 
@@ -667,7 +636,7 @@ router.get('/provider/requests/:bookingId', (req, res) => {
  * POST /bookings/provider/requests/:bookingId/accept
  * Role: Service Provider only
  */
-router.post('/provider/requests/:bookingId/accept', (req, res) => {
+router.post('/provider/requests/:bookingId/accept', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -681,7 +650,7 @@ router.post('/provider/requests/:bookingId/accept', (req, res) => {
         }
 
         // Verify booking exists and belongs to provider
-        const getBookingStmt = db.prepare(`
+        const booking = await db.get(`
             SELECT 
                 b.bookid, b.svid, b.poid, b.slot, b.servedate, b.status, b.book_timestamp,
                 s.name as service_name, s.providerid,
@@ -690,12 +659,10 @@ router.post('/provider/requests/:bookingId/accept', (req, res) => {
             FROM booking b
             JOIN service s ON b.svid = s.serviceid
             JOIN petowner po ON b.poid = po.id
-            JOIN users u ON po.id = u.userid
+            JOIN user u ON po.id = u.userid
             JOIN serviceprovider sp ON s.providerid = sp.id
             WHERE b.bookid = ? AND s.providerid = ?
-        `);
-        
-        const booking = getBookingStmt.get(bookingId, userId);
+        `, [bookingId, userId]);
 
         if (!booking) {
             return res.status(404).json({ 
@@ -717,10 +684,9 @@ router.post('/provider/requests/:bookingId/accept', (req, res) => {
 
         if (hoursSinceBooking >= 24) {
             // Auto-reject expired booking
-            const rejectBookingStmt = db.prepare(`
+            await db.execute(`
                 UPDATE booking SET status = 'rejected' WHERE bookid = ?
-            `);
-            rejectBookingStmt.run(bookingId);
+            `, [bookingId]);
 
             return res.status(400).json({ 
                 message: 'Cannot accept expired booking request (more than 24 hours old). Booking has been automatically rejected.' 
@@ -728,7 +694,7 @@ router.post('/provider/requests/:bookingId/accept', (req, res) => {
         }
 
         // Check for conflicts with other confirmed bookings
-        const checkConflictsStmt = db.prepare(`
+        const conflicts = await db.all(`
             SELECT 
                 b2.bookid,
                 s2.name as service_name
@@ -739,9 +705,7 @@ router.post('/provider/requests/:bookingId/accept', (req, res) => {
             AND b2.slot = ? 
             AND b2.bookid != ?
             AND b2.status = 'confirmed'
-        `);
-
-        const conflicts = checkConflictsStmt.all(userId, booking.servedate, booking.slot, bookingId);
+        `, [userId, booking.servedate, booking.slot, bookingId]);
 
         if (conflicts.length > 0) {
             return res.status(409).json({
@@ -754,11 +718,9 @@ router.post('/provider/requests/:bookingId/accept', (req, res) => {
         }
 
         // Accept the booking
-        const acceptBookingStmt = db.prepare(`
+        await db.execute(`
             UPDATE booking SET status = 'confirmed' WHERE bookid = ?
-        `);
-        
-        acceptBookingStmt.run(bookingId);
+        `, [bookingId]);
 
         // Send notification to pet owner about booking acceptance
         try {
@@ -798,7 +760,7 @@ router.post('/provider/requests/:bookingId/accept', (req, res) => {
  * POST /bookings/provider/requests/:bookingId/reject
  * Role: Service Provider only
  */
-router.post('/provider/requests/:bookingId/reject', (req, res) => {
+router.post('/provider/requests/:bookingId/reject', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -813,7 +775,7 @@ router.post('/provider/requests/:bookingId/reject', (req, res) => {
         }
 
         // Verify booking exists and belongs to provider
-        const getBookingStmt = db.prepare(`
+        const booking = await db.get(`
             SELECT 
                 b.bookid, b.svid, b.slot, b.servedate, b.status,
                 s.name as service_name, s.providerid,
@@ -821,11 +783,9 @@ router.post('/provider/requests/:bookingId/reject', (req, res) => {
             FROM booking b
             JOIN service s ON b.svid = s.serviceid
             JOIN petowner po ON b.poid = po.id
-            JOIN users u ON po.id = u.userid
+            JOIN user u ON po.id = u.userid
             WHERE b.bookid = ? AND s.providerid = ?
-        `);
-        
-        const booking = getBookingStmt.get(bookingId, userId);
+        `, [bookingId, userId]);
 
         if (!booking) {
             return res.status(404).json({ 
@@ -841,21 +801,18 @@ router.post('/provider/requests/:bookingId/reject', (req, res) => {
         }
 
         // Reject the booking
-        const rejectBookingStmt = db.prepare(`
+        await db.execute(`
             UPDATE booking SET status = 'rejected' WHERE bookid = ?
-        `);
-        
-        rejectBookingStmt.run(bookingId);
+        `, [bookingId]);
 
         // Send notification to pet owner about booking rejection
         try {
             // Get provider name for notification
-            const getProviderNameStmt = db.prepare(`
+            const providerInfo = await db.get(`
                 SELECT sp.business_name
                 FROM serviceprovider sp
                 WHERE sp.id = ?
-            `);
-            const providerInfo = getProviderNameStmt.get(userId);
+            `, [userId]);
             
             notificationService.notifyBookingRejected(
                 booking.bookid,
@@ -897,7 +854,7 @@ router.post('/provider/requests/:bookingId/reject', (req, res) => {
  * POST /bookings/provider/auto-reject-expired
  * Role: Service Provider only
  */
-router.post('/provider/auto-reject-expired', (req, res) => {
+router.post('/provider/auto-reject-expired', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -910,7 +867,7 @@ router.post('/provider/auto-reject-expired', (req, res) => {
         }
 
         // Find all pending bookings older than 24 hours for this provider
-        const getExpiredBookingsStmt = db.prepare(`
+        const expiredBookings = await db.all(`
             SELECT 
                 b.bookid,
                 b.book_timestamp,
@@ -919,13 +876,11 @@ router.post('/provider/auto-reject-expired', (req, res) => {
             FROM booking b
             JOIN service s ON b.svid = s.serviceid
             JOIN petowner po ON b.poid = po.id
-            JOIN users u ON po.id = u.userid
+            JOIN user u ON po.id = u.userid
             WHERE s.providerid = ? 
             AND b.status = 'pending'
             AND datetime(b.book_timestamp, '+24 hours') <= datetime('now')
-        `);
-
-        const expiredBookings = getExpiredBookingsStmt.all(userId);
+        `, [userId]);
 
         if (expiredBookings.length === 0) {
             return res.status(200).json({
@@ -934,30 +889,25 @@ router.post('/provider/auto-reject-expired', (req, res) => {
             });
         }
 
-        // Reject all expired bookings
-        const rejectBookingStmt = db.prepare(`
-            UPDATE booking SET status = 'rejected' WHERE bookid = ?
-        `);
-
         // Get provider name for notifications
-        const getProviderNameStmt = db.prepare(`
+        const providerInfo = await db.get(`
             SELECT business_name FROM serviceprovider WHERE id = ?
-        `);
-        const providerInfo = getProviderNameStmt.get(userId);
+        `, [userId]);
 
         const rejectedBookings = [];
-        expiredBookings.forEach(booking => {
-            rejectBookingStmt.run(booking.bookid);
+        for (const booking of expiredBookings) {
+            await db.execute(`
+                UPDATE booking SET status = 'rejected' WHERE bookid = ?
+            `, [booking.bookid]);
             
             // Send expiry notification to pet owner
             try {
                 // Get additional booking details for notification
-                const getBookingDetailsStmt = db.prepare(`
+                const bookingDetails = await db.get(`
                     SELECT b.poid, b.servedate, b.slot
                     FROM booking b
                     WHERE b.bookid = ?
-                `);
-                const bookingDetails = getBookingDetailsStmt.get(booking.bookid);
+                `, [booking.bookid]);
                 
                 if (bookingDetails) {
                     notificationService.notifyBookingExpired(
@@ -980,7 +930,7 @@ router.post('/provider/auto-reject-expired', (req, res) => {
                 customerName: booking.customer_name,
                 bookingTimestamp: booking.book_timestamp
             });
-        });
+        }
 
         res.status(200).json({
             message: `Successfully auto-rejected ${expiredBookings.length} expired booking request(s)`,
@@ -1001,7 +951,7 @@ router.post('/provider/auto-reject-expired', (req, res) => {
  * GET /bookings/provider/availability/:serviceId/:date
  * Role: Service Provider only
  */
-router.get('/provider/availability/:serviceId/:date', (req, res) => {
+router.get('/provider/availability/:serviceId/:date', async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -1015,12 +965,10 @@ router.get('/provider/availability/:serviceId/:date', (req, res) => {
         }
 
         // Verify service belongs to provider
-        const getServiceStmt = db.prepare(`
+        const service = await db.get(`
             SELECT serviceid, name, providerid FROM service 
             WHERE serviceid = ? AND providerid = ?
-        `);
-        
-        const service = getServiceStmt.get(serviceId, userId);
+        `, [serviceId, userId]);
 
         if (!service) {
             return res.status(404).json({ 
@@ -1029,22 +977,20 @@ router.get('/provider/availability/:serviceId/:date', (req, res) => {
         }
 
         // Get all timeslots for this service
-        const getAllTimeSlotsStmt = db.prepare(`
+        const allTimeSlots = await db.all(`
             SELECT slot FROM timeslot WHERE serviceid = ? ORDER BY slot
-        `);
-        const allTimeSlots = getAllTimeSlotsStmt.all(serviceId);
+        `, [serviceId]);
 
         // Get booked timeslots for the specified date (excluding cancelled/rejected)
-        const getBookedSlotsStmt = db.prepare(`
+        const bookedSlots = await db.all(`
             SELECT slot, status, COUNT(*) as booking_count
             FROM booking 
             WHERE svid = ? AND servedate = ? AND status NOT IN ('cancelled', 'rejected')
             GROUP BY slot, status
-        `);
-        const bookedSlots = getBookedSlotsStmt.all(serviceId, date);
+        `, [serviceId, date]);
 
         // Check for conflicts with other services on the same date
-        const getOtherServiceConflictsStmt = db.prepare(`
+        const conflicts = await db.all(`
             SELECT 
                 b.slot,
                 s.name as conflicting_service_name,
@@ -1056,8 +1002,7 @@ router.get('/provider/availability/:serviceId/:date', (req, res) => {
             AND b.svid != ?
             AND b.status = 'confirmed'
             GROUP BY b.slot, s.serviceid, s.name
-        `);
-        const conflicts = getOtherServiceConflictsStmt.all(userId, date, serviceId);
+        `, [userId, date, serviceId]);
 
         // Build availability response
         const availability = allTimeSlots.map(timeSlot => {

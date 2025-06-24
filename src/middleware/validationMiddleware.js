@@ -2,7 +2,7 @@
  * Validation middleware for request data
  */
 
-import db from '../Database_sqlite.js';
+import db from '../db.js';
 
 /**
  * Validate Vietnamese phone numbers
@@ -1348,7 +1348,7 @@ export const validateApprovedServiceUpdate = (req, res, next) => {
 /**
  * Validate timeslot updates for booking conflicts (for approved services)
  */
-export const validateTimeslotConflicts = (req, res, next) => {
+export const validateTimeslotConflicts = async (req, res, next) => {
     const { timeSlots } = req.body;
     
     // Only validate if timeSlots are being updated
@@ -1367,34 +1367,31 @@ export const validateTimeslotConflicts = (req, res, next) => {
 
     try {
         // Get existing timeslots
-        const existingTimeSlotsStmt = db.prepare(`
+        const existingSlots = (await db.all(`
             SELECT slot FROM timeslot WHERE serviceid = ?
-        `);
-        const existingSlots = existingTimeSlotsStmt.all(serviceId).map(ts => ts.slot);
+        `, [serviceId])).map(ts => ts.slot);
         
         // Find slots that would be removed
         const slotsToRemove = existingSlots.filter(slot => !timeSlots.includes(slot));
         
         if (slotsToRemove.length > 0) {
             // Check for future bookings on slots to be removed
-            const checkFutureBookingsStmt = db.prepare(`
-                SELECT COUNT(*) as count 
-                FROM booking 
-                WHERE svid = ? AND slot = ? 
-                AND servedate >= date('now') 
-                AND status NOT IN ('cancelled', 'completed')
-            `);
-            
             const conflictingSlots = [];
-            slotsToRemove.forEach(slot => {
-                const result = checkFutureBookingsStmt.get(serviceId, slot);
+            for (const slot of slotsToRemove) {
+                const result = await db.get(`
+                    SELECT COUNT(*) as count 
+                    FROM booking 
+                    WHERE svid = ? AND slot = ? 
+                    AND servedate >= date('now') 
+                    AND status NOT IN ('cancelled', 'completed')
+                `, [serviceId, slot]);
                 if (result.count > 0) {
                     conflictingSlots.push({
                         slot: slot,
                         futureBookings: result.count
                     });
                 }
-            });
+            }
             
             if (conflictingSlots.length > 0) {
                 return res.status(409).json({

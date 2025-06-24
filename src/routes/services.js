@@ -1,5 +1,5 @@
 import express from 'express'
-import db from '../Database_sqlite.js';
+import db from '../db.js';
 import authMiddleware from '../middleware/authMiddleware.js';
 import { validateServiceSubmission, validateServiceApproval, validateApprovedServiceUpdate, validateTimeslotConflicts } from '../middleware/validationMiddleware.js';
 import notificationService from '../services/notificationService.js';
@@ -26,20 +26,19 @@ router.post('/initialize', authMiddleware, async (req, res) => {
             });
         }
 
-        // Start transaction using better-sqlite3 syntax
-        const transaction = db.prepare(`
-            INSERT OR REPLACE INTO servicetype (type) VALUES (?)
-        `);
-
+        // Start transaction
         try {
-            db.prepare('BEGIN').run();
+            await db.beginTransaction();
             
             // Execute inserts within transaction
-            serviceTypes.forEach(serviceType => {
-                transaction.run(serviceType.type);
-            });
+            for (const serviceType of serviceTypes) {
+                await db.execute(`
+                    INSERT INTO servicetype (type) VALUES (?)
+                    ON DUPLICATE KEY UPDATE type = VALUES(type)
+                `, [serviceType.type]);
+            }
             
-            db.prepare('COMMIT').run();
+            await db.commit();
 
             res.status(200).json({
                 message: 'Service types initialized',
@@ -47,7 +46,7 @@ router.post('/initialize', authMiddleware, async (req, res) => {
             });
 
         } catch (error) {
-            db.prepare('ROLLBACK').run();
+            await db.rollback();
             throw error;
         }
 
@@ -60,15 +59,13 @@ router.post('/initialize', authMiddleware, async (req, res) => {
 });
 
 // Get all service types
-router.get('/types', (req, res) => {
+router.get('/types', async (req, res) => {
     try {
-        const getServiceTypesStmt = db.prepare(`
+        const serviceTypes = await db.all(`
             SELECT typeid, type
             FROM servicetype
             ORDER BY type ASC
         `);
-        
-        const serviceTypes = getServiceTypesStmt.all();
 
         res.status(200).json({
             message: 'Service types retrieved successfully',
@@ -83,7 +80,7 @@ router.get('/types', (req, res) => {
 });
 
 // Add a new service (Service Provider only)
-router.post('/', authMiddleware, validateServiceSubmission, (req, res) => {
+router.post('/', authMiddleware, validateServiceSubmission, async (req, res) => {
     try {
         const userId = req.user.userid;
         const userRole = req.user.role;
@@ -111,32 +108,29 @@ router.post('/', authMiddleware, validateServiceSubmission, (req, res) => {
         // Handle service type creation or validation
         if (serviceType) {
              // First, check if the service type already exists
-            const getTypeStmt = db.prepare(`
+            const existingType = await db.get(`
                 SELECT typeid FROM servicetype WHERE type = ?
-            `);
-            const existingType = getTypeStmt.get(serviceType.trim());
+            `, [serviceType.trim()]);
             if (existingType) {
                 finalTypeId = existingType.typeid;
             } else {
                 // Create new service type (service providers only)
-            const insertTypeStmt = db.prepare(`
-                    INSERT INTO servicetype (type) VALUES (?)
-                `);
-            try {
-                const typeResult = insertTypeStmt.run(serviceType.trim());
-                 finalTypeId = typeResult.lastInsertRowid;
-            } catch (error) {
-                return res.status(500).json({
-                message: 'Error creating new service type'
+                try {
+                    const typeResult = await db.execute(`
+                        INSERT INTO servicetype (type) VALUES (?)
+                    `, [serviceType.trim()]);
+                    finalTypeId = typeResult.insertId;
+                } catch (error) {
+                    return res.status(500).json({
+                        message: 'Error creating new service type'
                     });
                 }
             }
         } else if (typeid) {
             // Verify existing service type exists
-            const checkTypeStmt = db.prepare(`
+            const serviceTypeRecord = await db.get(`
                 SELECT typeid FROM servicetype WHERE typeid = ?
-            `);
-            const serviceTypeRecord = checkTypeStmt.get(typeid);
+            `, [typeid]);
             
             if (!serviceTypeRecord) {
                 return res.status(400).json({
@@ -146,39 +140,27 @@ router.post('/', authMiddleware, validateServiceSubmission, (req, res) => {
         }
 
         // Start transaction
-        db.exec('BEGIN TRANSACTION');
-
         try {
+            await db.beginTransaction();
+
             // Insert service
-            const insertServiceStmt = db.prepare(`
+            const result = await db.execute(`
                 INSERT INTO service (name, price, description, duration, license, typeid, providerid)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            `);
+            `, [name, price, description || null, duration, license || null, finalTypeId, userId]);
 
-            const result = insertServiceStmt.run(
-                name,
-                price,
-                description || null,
-                duration,
-                license || null,
-                finalTypeId,
-                userId
-            );
-
-            const serviceId = result.lastInsertRowid;
+            const serviceId = result.insertId;
 
             // Add time slots
-            const insertTimeSlotStmt = db.prepare(`
-                INSERT INTO timeslot (serviceid, slot)
-                VALUES (?, ?)
-            `);
-
             for (const slot of timeSlots) {
-                insertTimeSlotStmt.run(serviceId, slot);
+                await db.execute(`
+                    INSERT INTO timeslot (serviceid, slot)
+                    VALUES (?, ?)
+                `, [serviceId, slot]);
             }
 
             // Get the newly created service
-            const getServiceStmt = db.prepare(`
+            const newService = await db.get(`
                 SELECT 
                     s.serviceid,
                     s.name,
@@ -193,21 +175,17 @@ router.post('/', authMiddleware, validateServiceSubmission, (req, res) => {
                 JOIN servicetype st ON s.typeid = st.typeid
                 JOIN serviceprovider sp ON s.providerid = sp.id
                 WHERE s.serviceid = ?
-            `);
-
-            const newService = getServiceStmt.get(serviceId);
+            `, [serviceId]);
 
             // Get the time slots
-            const getTimeSlotsStmt = db.prepare(`
+            const serviceTimeSlots = await db.all(`
                 SELECT slot
                 FROM timeslot
                 WHERE serviceid = ?
                 ORDER BY slot ASC
-            `);
+            `, [serviceId]);
 
-            const serviceTimeSlots = getTimeSlotsStmt.all(serviceId);
-
-            db.exec('COMMIT');
+            await db.commit();
 
             res.status(201).json({
                 message: 'Service created successfully',
@@ -218,7 +196,7 @@ router.post('/', authMiddleware, validateServiceSubmission, (req, res) => {
             });
 
         } catch (err) {
-            db.exec('ROLLBACK');
+            await db.rollback();
             throw err;
         }
 
@@ -231,7 +209,7 @@ router.post('/', authMiddleware, validateServiceSubmission, (req, res) => {
 });
 
 // Get all services with optional filtering by multiple service types and name search
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
     try {
         const { 
             typeid,           // Single type ID (for backward compatibility)
@@ -313,8 +291,7 @@ router.get('/', (req, res) => {
         
         query += ' ORDER BY s.name ASC';
         
-        const getServicesStmt = db.prepare(query);
-        const services = getServicesStmt.all(...params);
+        const services = await db.all(query, params);
 
         res.status(200).json({
             message: 'Services retrieved successfully',
@@ -329,7 +306,7 @@ router.get('/', (req, res) => {
 });
 
 // Advanced search endpoint for services (must come before /:serviceid route)
-router.get('/search', (req, res) => {
+router.get('/search', async (req, res) => {
     try {
         const { 
             q,                // General search query (searches in name, description, and service type)
@@ -432,8 +409,7 @@ router.get('/search', (req, res) => {
             query += ` ORDER BY s.name ${order}`;
         }
         
-        const searchServicesStmt = db.prepare(query);
-        const services = searchServicesStmt.all(...params);
+        const services = await db.all(query, params);
 
         res.status(200).json({
             message: 'Service search completed successfully',
@@ -469,7 +445,7 @@ router.get('/search', (req, res) => {
  * POST /api/services/submit
  * Role: Service Provider only
  */
-router.post('/submit', authMiddleware, validateServiceSubmission, (req, res) => {
+router.post('/submit', authMiddleware, validateServiceSubmission, async (req, res) => {
     try {
         // Check if user is a service provider
         if (req.user.role !== 'Service provider') {
@@ -482,10 +458,9 @@ router.post('/submit', authMiddleware, validateServiceSubmission, (req, res) => 
         const providerId = req.user.userid;
 
         // Verify service provider exists
-        const checkProviderStmt = db.prepare(`
+        const provider = await db.get(`
             SELECT id FROM serviceprovider WHERE id = ?
-        `);
-        const provider = checkProviderStmt.get(providerId);
+        `, [providerId]);
         
         if (!provider) {
             return res.status(404).json({
@@ -498,21 +473,18 @@ router.post('/submit', authMiddleware, validateServiceSubmission, (req, res) => 
         // Handle service type creation or validation
         if (serviceType) {
             // Create new service type (service providers only)
-            const insertTypeStmt = db.prepare(`
-                INSERT INTO servicetype (type) VALUES (?)
-            `);
-            
             try {
-                const typeResult = insertTypeStmt.run(serviceType.trim());
-                finalTypeId = typeResult.lastInsertRowid;
+                const typeResult = await db.execute(`
+                    INSERT INTO servicetype (type) VALUES (?)
+                `, [serviceType.trim()]);
+                finalTypeId = typeResult.insertId;
             } catch (error) {
                 // Handle duplicate service type
-                if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+                if (error.code === 'ER_DUP_ENTRY') {
                     // Get existing type ID
-                    const getTypeStmt = db.prepare(`
+                    const existingType = await db.get(`
                         SELECT typeid FROM servicetype WHERE type = ?
-                    `);
-                    const existingType = getTypeStmt.get(serviceType.trim());
+                    `, [serviceType.trim()]);
                     if (existingType) {
                         finalTypeId = existingType.typeid;
                     } else {
@@ -526,10 +498,9 @@ router.post('/submit', authMiddleware, validateServiceSubmission, (req, res) => 
             }
         } else if (typeid) {
             // Verify existing service type exists
-            const checkTypeStmt = db.prepare(`
+            const serviceTypeRecord = await db.get(`
                 SELECT typeid FROM servicetype WHERE typeid = ?
-            `);
-            const serviceTypeRecord = checkTypeStmt.get(typeid);
+            `, [typeid]);
             
             if (!serviceTypeRecord) {
                 return res.status(400).json({
@@ -539,49 +510,39 @@ router.post('/submit', authMiddleware, validateServiceSubmission, (req, res) => 
         }
 
         // Insert the service with pending status
-        const insertServiceStmt = db.prepare(`
+        const serviceResult = await db.execute(`
             INSERT INTO service (name, price, description, duration, license, typeid, providerid, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
-        `);
-        
-        const serviceResult = insertServiceStmt.run(
-            name.trim(),
-            price,
-            description.trim(),
-            duration.trim(),
-            license || null,
-            finalTypeId,
-            providerId
-        );
+        `, [name.trim(), price, description.trim(), duration.trim(), license || null, finalTypeId, providerId]);
 
         // Add time slots if provided
         if (timeSlots && timeSlots.length > 0) {
-            const insertTimeSlotStmt = db.prepare(`
-                INSERT INTO timeslot (serviceid, slot) VALUES (?, ?)
-            `);
-            
-            timeSlots.forEach(slot => {
-                insertTimeSlotStmt.run(serviceResult.lastInsertRowid, slot);
-            });
+            for (const slot of timeSlots) {
+                await db.execute(`
+                    INSERT INTO timeslot (serviceid, slot) VALUES (?, ?)
+                `, [serviceResult.insertId, slot]);
+            }
         }
 
         // Get the created service with type name
-        const getServiceStmt = db.prepare(`
+        const createdService = await db.get(`
             SELECT 
                 s.serviceid,
                 s.name,
                 s.price,
                 s.description,
                 s.duration,
-                s.status,
-                s.submission_date,
-                st.type as service_type
+                s.license,
+                s.typeid,
+                st.type as service_type,
+                s.providerid,
+                sp.business_name as provider_name,
+                s.status
             FROM service s
             JOIN servicetype st ON s.typeid = st.typeid
+            JOIN serviceprovider sp ON s.providerid = sp.id
             WHERE s.serviceid = ?
-        `);
-        
-        const createdService = getServiceStmt.get(serviceResult.lastInsertRowid);
+        `, [serviceResult.insertId]);
 
         res.status(201).json({
             message: 'Service submitted successfully for review',
@@ -604,7 +565,7 @@ router.post('/submit', authMiddleware, validateServiceSubmission, (req, res) => 
  * GET /api/services/my-services
  * Role: Service Provider only
  */
-router.get('/my-services', authMiddleware, (req, res) => {
+router.get('/my-services', authMiddleware, async (req, res) => {
     try {
         // Check if user is a service provider
         if (req.user.role !== 'Service provider') {
@@ -650,17 +611,18 @@ router.get('/my-services', authMiddleware, (req, res) => {
 
         query += ' ORDER BY s.submission_date DESC';
 
-        const getServicesStmt = db.prepare(query);
-        const services = getServicesStmt.all(...params);
+        const services = await db.all(query, params);
 
         // Get time slots for each service
-        const getTimeSlotsStmt = db.prepare(`
-            SELECT slot FROM timeslot WHERE serviceid = ? ORDER BY slot
-        `);
-
-        const servicesWithSlots = services.map(service => ({
-            ...service,
-            timeSlots: getTimeSlotsStmt.all(service.serviceid).map(ts => ts.slot)
+        const servicesWithSlots = await Promise.all(services.map(async service => {
+            const timeSlots = await db.all(`
+                SELECT slot FROM timeslot WHERE serviceid = ? ORDER BY slot
+            `, [service.serviceid]);
+            
+            return {
+                ...service,
+                timeSlots: timeSlots.map(ts => ts.slot)
+            };
         }));
 
         // Calculate statistics
@@ -690,7 +652,7 @@ router.get('/my-services', authMiddleware, (req, res) => {
  * GET /api/services/pending-review
  * Role: Manager only
  */
-router.get('/pending-review', authMiddleware, (req, res) => {
+router.get('/pending-review', authMiddleware, async (req, res) => {
     try {
         // Check if user is a manager
         if (req.user.role !== 'Manager') {
@@ -699,7 +661,7 @@ router.get('/pending-review', authMiddleware, (req, res) => {
             });
         }
 
-        const getPendingServicesStmt = db.prepare(`
+        const pendingServices = await db.all(`
             SELECT 
                 s.serviceid,
                 s.name,
@@ -721,16 +683,16 @@ router.get('/pending-review', authMiddleware, (req, res) => {
             ORDER BY s.submission_date ASC
         `);
 
-        const pendingServices = getPendingServicesStmt.all();
-
         // Get time slots for each service
-        const getTimeSlotsStmt = db.prepare(`
-            SELECT slot FROM timeslot WHERE serviceid = ? ORDER BY slot
-        `);
-
-        const servicesWithSlots = pendingServices.map(service => ({
-            ...service,
-            timeSlots: getTimeSlotsStmt.all(service.serviceid).map(ts => ts.slot)
+        const servicesWithSlots = await Promise.all(pendingServices.map(async service => {
+            const timeSlots = await db.all(`
+                SELECT slot FROM timeslot WHERE serviceid = ? ORDER BY slot
+            `, [service.serviceid]);
+            
+            return {
+                ...service,
+                timeSlots: timeSlots.map(ts => ts.slot)
+            };
         }));
 
         res.status(200).json({
@@ -752,7 +714,7 @@ router.get('/pending-review', authMiddleware, (req, res) => {
  * GET /api/services/review-summary
  * Role: Manager only
  */
-router.get('/review-summary', authMiddleware, (req, res) => {
+router.get('/review-summary', authMiddleware, async (req, res) => {
     try {
         // Check if user is a manager
         if (req.user.role !== 'Manager') {
@@ -762,7 +724,7 @@ router.get('/review-summary', authMiddleware, (req, res) => {
         }
 
         // Get overall statistics
-        const getStatsStmt = db.prepare(`
+        const stats = await db.get(`
             SELECT 
                 COUNT(*) as total_services,
                 SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_count,
@@ -771,10 +733,8 @@ router.get('/review-summary', authMiddleware, (req, res) => {
             FROM service
         `);
 
-        const stats = getStatsStmt.get();
-
         // Get recent reviews
-        const getRecentReviewsStmt = db.prepare(`
+        const recentReviews = await db.all(`
             SELECT 
                 s.serviceid,
                 s.name,
@@ -792,10 +752,8 @@ router.get('/review-summary', authMiddleware, (req, res) => {
             LIMIT 10
         `);
 
-        const recentReviews = getRecentReviewsStmt.all();
-
         // Get provider breakdown
-        const getProviderBreakdownStmt = db.prepare(`
+        const providerBreakdown = await db.all(`
             SELECT 
                 sp.business_name as provider_name,
                 COUNT(*) as total_services,
@@ -807,8 +765,6 @@ router.get('/review-summary', authMiddleware, (req, res) => {
             GROUP BY s.providerid, sp.business_name
             ORDER BY total_services DESC
         `);
-
-        const providerBreakdown = getProviderBreakdownStmt.all();
 
         res.status(200).json({
             message: 'Service review summary retrieved successfully',
@@ -828,12 +784,12 @@ router.get('/review-summary', authMiddleware, (req, res) => {
 });
 
 // Get service details by ID including available time slots
-router.get('/:serviceid', (req, res) => {
+router.get('/:serviceid', async (req, res) => {
     try {
         const { serviceid } = req.params;
 
         // Get service details
-        const getServiceStmt = db.prepare(`
+        const service = await db.get(`
             SELECT 
                 s.serviceid,
                 s.name,
@@ -848,9 +804,7 @@ router.get('/:serviceid', (req, res) => {
             JOIN servicetype st ON s.typeid = st.typeid
             JOIN serviceprovider sp ON s.providerid = sp.id
             WHERE s.serviceid = ? AND s.status = 'approved'
-        `);
-
-        const service = getServiceStmt.get(serviceid);
+        `, [serviceid]);
 
         if (!service) {
             return res.status(404).json({
@@ -859,11 +813,10 @@ router.get('/:serviceid', (req, res) => {
         }
 
         // Get available time slots for this service
-        const getTimeSlotsStmt = db.prepare(`
+        const timeSlots = await db.all(`
             SELECT slot FROM timeslot WHERE serviceid = ? ORDER BY slot
-        `);
+        `, [serviceid]);
 
-        const timeSlots = getTimeSlotsStmt.all(serviceid);
         service.timeSlots = timeSlots.map(ts => ts.slot);
 
         res.status(200).json({
@@ -884,7 +837,7 @@ router.get('/:serviceid', (req, res) => {
  * PUT /api/services/:id/update
  * Role: Service Provider only (can only update their own pending services)
  */
-router.put('/:id/update', authMiddleware, validateServiceSubmission, (req, res) => {
+router.put('/:id/update', authMiddleware, validateServiceSubmission, async (req, res) => {
     try {
         // Check if user is a service provider
         if (req.user.role !== 'Service provider') {
@@ -904,11 +857,10 @@ router.put('/:id/update', authMiddleware, validateServiceSubmission, (req, res) 
         }
 
         // Check if service exists and belongs to this provider
-        const checkServiceStmt = db.prepare(`
+        const service = await db.get(`
             SELECT serviceid, status, providerid FROM service 
             WHERE serviceid = ? AND providerid = ?
-        `);
-        const service = checkServiceStmt.get(serviceId, providerId);
+        `, [serviceId, providerId]);
 
         if (!service) {
             return res.status(404).json({
@@ -924,10 +876,9 @@ router.put('/:id/update', authMiddleware, validateServiceSubmission, (req, res) 
         }
 
         // Verify service type exists
-        const checkTypeStmt = db.prepare(`
+        const serviceType = await db.get(`
             SELECT typeid FROM servicetype WHERE typeid = ?
-        `);
-        const serviceType = checkTypeStmt.get(typeid);
+        `, [typeid]);
         
         if (!serviceType) {
             return res.status(400).json({
@@ -935,59 +886,63 @@ router.put('/:id/update', authMiddleware, validateServiceSubmission, (req, res) 
             });
         }
 
-        // Update the service
-        const updateServiceStmt = db.prepare(`
-            UPDATE service 
-            SET name = ?, price = ?, description = ?, duration = ?, typeid = ?, 
-                submission_date = CURRENT_TIMESTAMP
-            WHERE serviceid = ? AND providerid = ?
-        `);
-        
-        updateServiceStmt.run(
-            name.trim(),
-            price,
-            description.trim(),
-            duration.trim(),
-            typeid,
-            serviceId,
-            providerId
-        );
+        // Start transaction
+        await db.beginTransaction();
 
-        // Update time slots
-        if (timeSlots && timeSlots.length > 0) {
-            // Remove existing time slots
-            const deleteTimeSlotsStmt = db.prepare(`
-                DELETE FROM timeslot WHERE serviceid = ?
-            `);
-            deleteTimeSlotsStmt.run(serviceId);
+        try {
+            // Update the service
+            await db.execute(`
+                UPDATE service 
+                SET name = ?, price = ?, description = ?, duration = ?, typeid = ?, 
+                    submission_date = CURRENT_TIMESTAMP
+                WHERE serviceid = ? AND providerid = ?
+            `, [
+                name.trim(),
+                price,
+                description.trim(),
+                duration.trim(),
+                typeid,
+                serviceId,
+                providerId
+            ]);
 
-            // Add new time slots
-            const insertTimeSlotStmt = db.prepare(`
-                INSERT INTO timeslot (serviceid, slot) VALUES (?, ?)
-            `);
-            
-            timeSlots.forEach(slot => {
-                insertTimeSlotStmt.run(serviceId, slot);
-            });
+            // Update time slots
+            if (timeSlots && timeSlots.length > 0) {
+                // Remove existing time slots
+                await db.execute(`
+                    DELETE FROM timeslot WHERE serviceid = ?
+                `, [serviceId]);
+
+                // Add new time slots
+                for (const slot of timeSlots) {
+                    await db.execute(`
+                        INSERT INTO timeslot (serviceid, slot) VALUES (?, ?)
+                    `, [serviceId, slot]);
+                }
+            }
+
+            await db.commit();
+
+            // Get updated service details
+            const updatedService = await db.get(`
+                SELECT 
+                    s.serviceid,
+                    s.name,
+                    s.price,
+                    s.description,
+                    s.duration,
+                    s.status,
+                    s.submission_date,
+                    st.type as service_type
+                FROM service s
+                JOIN servicetype st ON s.typeid = st.typeid
+                WHERE s.serviceid = ?
+            `, [serviceId]);
+
+        } catch (transactionErr) {
+            await db.rollback();
+            throw transactionErr;
         }
-
-        // Get updated service details
-        const getServiceStmt = db.prepare(`
-            SELECT 
-                s.serviceid,
-                s.name,
-                s.price,
-                s.description,
-                s.duration,
-                s.status,
-                s.submission_date,
-                st.type as service_type
-            FROM service s
-            JOIN servicetype st ON s.typeid = st.typeid
-            WHERE s.serviceid = ?
-        `);
-        
-        const updatedService = getServiceStmt.get(serviceId);
 
         res.status(200).json({
             message: 'Service updated successfully',
@@ -1010,7 +965,7 @@ router.put('/:id/update', authMiddleware, validateServiceSubmission, (req, res) 
  * PUT /api/services/:id/update-approved
  * Role: Service Provider only (can only update their own approved services)
  */
-router.put('/:id/update-approved', authMiddleware, validateApprovedServiceUpdate, validateTimeslotConflicts, (req, res) => {
+router.put('/:id/update-approved', authMiddleware, validateApprovedServiceUpdate, validateTimeslotConflicts, async (req, res) => {
     try {
         // Check if user is a service provider
         if (req.user.role !== 'Service provider') {
@@ -1030,11 +985,10 @@ router.put('/:id/update-approved', authMiddleware, validateApprovedServiceUpdate
         }
 
         // Check if service exists and belongs to this provider
-        const checkServiceStmt = db.prepare(`
+        const service = await db.get(`
             SELECT serviceid, status, providerid, name FROM service 
             WHERE serviceid = ? AND providerid = ?
-        `);
-        const service = checkServiceStmt.get(serviceId, providerId);
+        `, [serviceId, providerId]);
 
         if (!service) {
             return res.status(404).json({
@@ -1050,56 +1004,53 @@ router.put('/:id/update-approved', authMiddleware, validateApprovedServiceUpdate
         }
 
         // Start transaction
-        db.exec('BEGIN TRANSACTION');
+        await db.beginTransaction();
 
         try {
             // Update description if provided
             if (description !== undefined) {
-                const updateDescriptionStmt = db.prepare(`
+                await db.execute(`
                     UPDATE service 
                     SET description = ?
                     WHERE serviceid = ? AND providerid = ?
-                `);
-                
-                updateDescriptionStmt.run(description.trim(), serviceId, providerId);
+                `, [description.trim(), serviceId, providerId]);
             }
 
             // Update time slots if provided
             if (timeSlots !== undefined && timeSlots.length > 0) {
                 // Check for booking conflicts before making any changes
-                const existingTimeSlotsStmt = db.prepare(`
+                const existingSlots = await db.all(`
                     SELECT slot FROM timeslot WHERE serviceid = ?
-                `);
-                const existingSlots = existingTimeSlotsStmt.all(serviceId).map(ts => ts.slot);
+                `, [serviceId]);
+                const existingSlotValues = existingSlots.map(ts => ts.slot);
                 
                 // Find slots to be removed (existing but not in new list)
-                const slotsToRemove = existingSlots.filter(slot => !timeSlots.includes(slot));
+                const slotsToRemove = existingSlotValues.filter(slot => !timeSlots.includes(slot));
                 
                 if (slotsToRemove.length > 0) {
                     // Check if any of the slots to be removed have active bookings
-                    const checkBookingsStmt = db.prepare(`
-                        SELECT b.bookid, b.slot, b.servedate, b.status,
-                               po.id as petowner_id, u.name as petowner_name, u.email as petowner_email
-                        FROM booking b
-                        JOIN petowner po ON b.poid = po.id
-                        JOIN users u ON po.id = u.userid
-                        WHERE b.svid = ? AND b.slot = ? AND b.status NOT IN ('cancelled', 'completed')
-                    `);
-                    
                     const conflictingBookings = [];
-                    slotsToRemove.forEach(slot => {
-                        const bookings = checkBookingsStmt.all(serviceId, slot);
+                    for (const slot of slotsToRemove) {
+                        const bookings = await db.all(`
+                            SELECT b.bookid, b.slot, b.servedate, b.status,
+                                   po.id as petowner_id, u.name as petowner_name, u.email as petowner_email
+                            FROM booking b
+                            JOIN petowner po ON b.poid = po.id
+                            JOIN users u ON po.id = u.userid
+                            WHERE b.svid = ? AND b.slot = ? AND b.status NOT IN ('cancelled', 'completed')
+                        `, [serviceId, slot]);
+                        
                         if (bookings.length > 0) {
                             conflictingBookings.push({
                                 slot: slot,
                                 bookings: bookings
                             });
                         }
-                    });
+                    }
                     
                     if (conflictingBookings.length > 0) {
                         // Return detailed conflict information
-                        db.exec('ROLLBACK');
+                        await db.rollback();
                         return res.status(409).json({
                             success: false,
                             error: 'Timeslot conflict detected',
@@ -1131,31 +1082,28 @@ router.put('/:id/update-approved', authMiddleware, validateApprovedServiceUpdate
                 
                 // Remove timeslots that can be safely removed (no active bookings)
                 if (slotsToRemove.length > 0) {
-                    const deleteTimeSlotsStmt = db.prepare(`
-                        DELETE FROM timeslot WHERE serviceid = ? AND slot = ?
-                    `);
-                    slotsToRemove.forEach(slot => {
-                        deleteTimeSlotsStmt.run(serviceId, slot);
-                    });
+                    for (const slot of slotsToRemove) {
+                        await db.execute(`
+                            DELETE FROM timeslot WHERE serviceid = ? AND slot = ?
+                        `, [serviceId, slot]);
+                    }
                 }
 
                 // Add new time slots
-                const slotsToAdd = timeSlots.filter(slot => !existingSlots.includes(slot));
+                const slotsToAdd = timeSlots.filter(slot => !existingSlotValues.includes(slot));
                 if (slotsToAdd.length > 0) {
-                    const insertTimeSlotStmt = db.prepare(`
-                        INSERT INTO timeslot (serviceid, slot) VALUES (?, ?)
-                    `);
-                    
-                    slotsToAdd.forEach(slot => {
-                        insertTimeSlotStmt.run(serviceId, slot);
-                    });
+                    for (const slot of slotsToAdd) {
+                        await db.execute(`
+                            INSERT INTO timeslot (serviceid, slot) VALUES (?, ?)
+                        `, [serviceId, slot]);
+                    }
                 }
             }
 
-            db.exec('COMMIT');
+            await db.commit();
 
             // Get updated service details
-            const getServiceStmt = db.prepare(`
+            const updatedService = await db.get(`
                 SELECT 
                     s.serviceid,
                     s.name,
@@ -1169,21 +1117,18 @@ router.put('/:id/update-approved', authMiddleware, validateApprovedServiceUpdate
                 FROM service s
                 JOIN servicetype st ON s.typeid = st.typeid
                 WHERE s.serviceid = ?
-            `);
-            
-            const updatedService = getServiceStmt.get(serviceId);
+            `, [serviceId]);
 
             // Get updated time slots
-            const getTimeSlotsStmt = db.prepare(`
+            const updatedTimeSlots = await db.all(`
                 SELECT slot FROM timeslot WHERE serviceid = ? ORDER BY slot
-            `);
-            const updatedTimeSlots = getTimeSlotsStmt.all(serviceId).map(ts => ts.slot);
+            `, [serviceId]);
 
             res.status(200).json({
                 message: 'Approved service updated successfully',
                 service: {
                     ...updatedService,
-                    timeSlots: updatedTimeSlots
+                    timeSlots: updatedTimeSlots.map(ts => ts.slot)
                 },
                 updatedFields: {
                     description: description !== undefined,
@@ -1192,7 +1137,7 @@ router.put('/:id/update-approved', authMiddleware, validateApprovedServiceUpdate
             });
 
         } catch (updateError) {
-            db.exec('ROLLBACK');
+            await db.rollback();
             throw updateError;
         }
 
@@ -1209,7 +1154,7 @@ router.put('/:id/update-approved', authMiddleware, validateApprovedServiceUpdate
  * POST /api/services/:id/review
  * Role: Manager only
  */
-router.post('/:id/review', authMiddleware, validateServiceApproval, (req, res) => {
+router.post('/:id/review', authMiddleware, validateServiceApproval, async (req, res) => {
     try {
         // Check if user is a manager
         if (req.user.role !== 'Manager') {
@@ -1229,7 +1174,7 @@ router.post('/:id/review', authMiddleware, validateServiceApproval, (req, res) =
         }
 
         // Check if service exists and is pending
-        const checkServiceStmt = db.prepare(`
+        const service = await db.get(`
             SELECT 
                 s.serviceid, 
                 s.status, 
@@ -1242,8 +1187,7 @@ router.post('/:id/review', authMiddleware, validateServiceApproval, (req, res) =
             JOIN serviceprovider sp ON s.providerid = sp.id
             JOIN users u ON sp.id = u.userid
             WHERE s.serviceid = ?
-        `);
-        const service = checkServiceStmt.get(serviceId);
+        `, [serviceId]);
 
         if (!service) {
             return res.status(404).json({
@@ -1258,10 +1202,9 @@ router.post('/:id/review', authMiddleware, validateServiceApproval, (req, res) =
         }
 
         // Verify manager exists
-        const checkManagerStmt = db.prepare(`
+        const manager = await db.get(`
             SELECT id FROM manager WHERE id = ?
-        `);
-        const manager = checkManagerStmt.get(managerId);
+        `, [managerId]);
         
         if (!manager) {
             return res.status(404).json({
@@ -1272,18 +1215,16 @@ router.post('/:id/review', authMiddleware, validateServiceApproval, (req, res) =
         const newStatus = action.toLowerCase() === 'approve' ? 'approved' : 'rejected';
         
         // Update service status
-        const updateServiceStmt = db.prepare(`
+        await db.execute(`
             UPDATE service 
             SET status = ?, review_date = CURRENT_TIMESTAMP, reviewed_by = ?, rejection_reason = ?
             WHERE serviceid = ?
-        `);
-        
-        updateServiceStmt.run(
+        `, [
             newStatus,
             managerId,
             newStatus === 'rejected' ? rejectionReason.trim() : null,
             serviceId
-        );
+        ]);
 
         // Send notification to service provider
         try {
@@ -1307,7 +1248,7 @@ router.post('/:id/review', authMiddleware, validateServiceApproval, (req, res) =
         }
 
         // Get updated service details
-        const getServiceStmt = db.prepare(`
+        const reviewedService = await db.get(`
             SELECT 
                 s.serviceid,
                 s.name,
@@ -1327,9 +1268,7 @@ router.post('/:id/review', authMiddleware, validateServiceApproval, (req, res) =
             LEFT JOIN manager m ON s.reviewed_by = m.id
             LEFT JOIN users u ON m.id = u.userid
             WHERE s.serviceid = ?
-        `);
-        
-        const reviewedService = getServiceStmt.get(serviceId);
+        `, [serviceId]);
 
         res.status(200).json({
             message: `Service ${newStatus} successfully`,
@@ -1352,7 +1291,7 @@ router.post('/:id/review', authMiddleware, validateServiceApproval, (req, res) =
  * GET /api/services/:serviceid/manager-details
  * Role: Manager only
  */
-router.get('/:serviceid/manager-details', authMiddleware, (req, res) => {
+router.get('/:serviceid/manager-details', authMiddleware, async (req, res) => {
     try {
         // Check if user is a manager
         if (req.user.role !== 'Manager') {
@@ -1364,7 +1303,7 @@ router.get('/:serviceid/manager-details', authMiddleware, (req, res) => {
         const { serviceid } = req.params;
 
         // Get complete service details including license
-        const getServiceStmt = db.prepare(`
+        const service = await db.get(`
             SELECT 
                 s.serviceid,
                 s.name,
@@ -1395,9 +1334,7 @@ router.get('/:serviceid/manager-details', authMiddleware, (req, res) => {
             LEFT JOIN manager m ON s.reviewed_by = m.id
             LEFT JOIN users mu ON m.id = mu.userid
             WHERE s.serviceid = ?
-        `);
-
-        const service = getServiceStmt.get(serviceid);
+        `, [serviceid]);
 
         if (!service) {
             return res.status(404).json({
@@ -1406,11 +1343,10 @@ router.get('/:serviceid/manager-details', authMiddleware, (req, res) => {
         }
 
         // Get time slots for this service
-        const getTimeSlotsStmt = db.prepare(`
+        const timeSlots = await db.all(`
             SELECT slot FROM timeslot WHERE serviceid = ? ORDER BY slot
-        `);
+        `, [serviceid]);
 
-        const timeSlots = getTimeSlotsStmt.all(serviceid);
         service.timeSlots = timeSlots.map(ts => ts.slot);
 
         res.status(200).json({
