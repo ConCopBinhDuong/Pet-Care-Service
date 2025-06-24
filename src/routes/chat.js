@@ -59,15 +59,24 @@ router.get('/booking/:bookingId', (req, res) => {
                 su.no_update,
                 su.text,
                 su.image,
-                'service_provider' as sender_type,
-                sp.business_name as sender_name,
-                u.name as sender_contact_name,
-                datetime('now') as timestamp
+                su.sender_type,
+                su.sender_id,
+                su.created_at,
+                CASE 
+                    WHEN su.sender_type = 'service_provider' THEN sp.business_name
+                    WHEN su.sender_type = 'pet_owner' THEN u_owner.name
+                END as sender_name,
+                CASE 
+                    WHEN su.sender_type = 'service_provider' THEN u_provider.name
+                    WHEN su.sender_type = 'pet_owner' THEN u_owner.name
+                END as sender_contact_name
             FROM service_update su
             JOIN booking b ON su.bookid = b.bookid
             JOIN service s ON b.svid = s.serviceid
-            JOIN serviceprovider sp ON s.providerid = sp.id
-            JOIN users u ON sp.id = u.userid
+            LEFT JOIN serviceprovider sp ON su.sender_type = 'service_provider' AND su.sender_id = sp.id
+            LEFT JOIN users u_provider ON sp.id = u_provider.userid
+            LEFT JOIN petowner po ON su.sender_type = 'pet_owner' AND su.sender_id = po.id
+            LEFT JOIN users u_owner ON po.id = u_owner.userid
             WHERE su.bookid = ?
             ORDER BY su.no_update ASC
         `);
@@ -85,7 +94,8 @@ router.get('/booking/:bookingId', (req, res) => {
             },
             messages: messages,
             user_role: userRole,
-            can_send_message: userRole === 'Service provider' && booking.providerid === userId
+            can_send_message: (userRole === 'Service provider' && booking.providerid === userId) || 
+                            (userRole === 'Pet owner' && booking.poid === userId)
         });
 
     } catch (err) {
@@ -94,7 +104,7 @@ router.get('/booking/:bookingId', (req, res) => {
     }
 });
 
-// Send a new chat message (service update)
+// Send a new chat message (both service providers and pet owners can send messages)
 router.post('/booking/:bookingId/message', validateChatMessage, (req, res) => {
     try {
         const { bookingId } = req.params;
@@ -102,26 +112,44 @@ router.post('/booking/:bookingId/message', validateChatMessage, (req, res) => {
         const userId = req.user.userid;
         const userRole = req.user.role;
 
-        // Only service providers can send service updates
-        if (userRole !== 'Service provider') {
+        // Only service providers and pet owners can send messages
+        if (userRole !== 'Service provider' && userRole !== 'Pet owner') {
             return res.status(403).json({ 
-                message: 'Access denied. Only service providers can send service updates.' 
+                message: 'Access denied. Only service providers and pet owners can send messages.' 
             });
         }
 
-        // Verify the service provider owns this booking's service
+        // Verify user has access to this booking
         const bookingCheckStmt = db.prepare(`
             SELECT b.bookid, b.poid, b.status, s.providerid
             FROM booking b
             JOIN service s ON b.svid = s.serviceid
-            WHERE b.bookid = ? AND s.providerid = ?
+            WHERE b.bookid = ?
         `);
 
-        const booking = bookingCheckStmt.get(bookingId, userId);
+        const booking = bookingCheckStmt.get(bookingId);
 
         if (!booking) {
             return res.status(404).json({ 
-                message: 'Booking not found or you do not have permission to update this booking.' 
+                message: 'Booking not found.' 
+            });
+        }
+
+        // Check if user has access to this booking
+        let hasAccess = false;
+        let senderType = '';
+        
+        if (userRole === 'Pet owner' && booking.poid === userId) {
+            hasAccess = true;
+            senderType = 'pet_owner';
+        } else if (userRole === 'Service provider' && booking.providerid === userId) {
+            hasAccess = true;
+            senderType = 'service_provider';
+        }
+
+        if (!hasAccess) {
+            return res.status(403).json({ 
+                message: 'Access denied. You can only send messages for your own bookings.' 
             });
         }
 
@@ -151,28 +179,45 @@ router.post('/booking/:bookingId/message', validateChatMessage, (req, res) => {
 
         // Insert the new service update
         const insertUpdateStmt = db.prepare(`
-            INSERT INTO service_update (bookid, no_update, text, image)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO service_update (bookid, no_update, text, image, sender_type, sender_id)
+            VALUES (?, ?, ?, ?, ?, ?)
         `);
 
-        insertUpdateStmt.run(bookingId, nextUpdateNumber, text, imageBlob);
+        insertUpdateStmt.run(bookingId, nextUpdateNumber, text, imageBlob, senderType, userId);
 
-        // Get service provider info for notification
-        const providerInfoStmt = db.prepare(`
-            SELECT sp.business_name, u.name as contact_name
-            FROM serviceprovider sp
-            JOIN users u ON sp.id = u.userid
-            WHERE sp.id = ?
-        `);
+        // Get sender info for notification and response
+        let senderInfo;
+        let notificationRecipientId;
+        
+        if (senderType === 'service_provider') {
+            const providerInfoStmt = db.prepare(`
+                SELECT sp.business_name, u.name as contact_name
+                FROM serviceprovider sp
+                JOIN users u ON sp.id = u.userid
+                WHERE sp.id = ?
+            `);
+            senderInfo = providerInfoStmt.get(userId);
+            notificationRecipientId = booking.poid; // Notify pet owner
+        } else {
+            const ownerInfoStmt = db.prepare(`
+                SELECT u.name as owner_name
+                FROM users u
+                WHERE u.userid = ?
+            `);
+            senderInfo = ownerInfoStmt.get(userId);
+            notificationRecipientId = booking.providerid; // Notify service provider
+        }
 
-        const providerInfo = providerInfoStmt.get(userId);
-
-        // Send notification to pet owner
+        // Send notification to the other party
         try {
+            const senderName = senderType === 'service_provider' 
+                ? senderInfo.business_name 
+                : senderInfo.owner_name;
+                
             const notificationResult = notificationService.createNotification(
-                booking.poid,
-                `New update from ${providerInfo.business_name}: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`,
-                'booking_update',
+                notificationRecipientId,
+                `New message from ${senderName}: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`,
+                'chat_message',
                 null,
                 bookingId
             );
@@ -186,13 +231,16 @@ router.post('/booking/:bookingId/message', validateChatMessage, (req, res) => {
         }
 
         res.status(201).json({
-            message: 'Service update sent successfully',
+            message: 'Message sent successfully',
             update: {
                 bookid: parseInt(bookingId),
                 no_update: nextUpdateNumber,
                 text: text,
                 has_image: !!image,
-                sender: providerInfo.business_name,
+                sender_type: senderType,
+                sender: senderType === 'service_provider' 
+                    ? senderInfo.business_name 
+                    : senderInfo.owner_name,
                 timestamp: new Date().toISOString()
             }
         });
@@ -296,53 +344,6 @@ router.get('/conversations', (req, res) => {
     }
 });
 
-// Mark chat as read (for future implementation with read status)
-router.put('/booking/:bookingId/mark-read', (req, res) => {
-    try {
-        const { bookingId } = req.params;
-        const userId = req.user.userid;
-        const userRole = req.user.role;
-
-        // Verify user has access to this booking
-        const bookingCheckStmt = db.prepare(`
-            SELECT b.bookid, b.poid, s.providerid
-            FROM booking b
-            JOIN service s ON b.svid = s.serviceid
-            WHERE b.bookid = ?
-        `);
-
-        const booking = bookingCheckStmt.get(bookingId);
-
-        if (!booking) {
-            return res.status(404).json({ message: 'Booking not found' });
-        }
-
-        // Check if user has access to this booking
-        let hasAccess = false;
-        if (userRole === 'Pet owner' && booking.poid === userId) {
-            hasAccess = true;
-        } else if (userRole === 'Service provider' && booking.providerid === userId) {
-            hasAccess = true;
-        }
-
-        if (!hasAccess) {
-            return res.status(403).json({ 
-                message: 'Access denied. You can only mark your own booking chats as read.' 
-            });
-        }
-
-        // For now, just return success
-        // In future implementations, could add read status tracking
-        res.status(200).json({
-            message: 'Chat marked as read',
-            bookid: parseInt(bookingId)
-        });
-
-    } catch (err) {
-        console.error('Mark chat as read error:', err.message);
-        res.status(500).json({ message: 'Internal server error' });
-    }
-});
 
 // Get image from service update
 router.get('/message/:bookingId/:updateNumber/image', (req, res) => {

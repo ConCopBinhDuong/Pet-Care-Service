@@ -234,8 +234,12 @@ db.exec(`
     no_update INTEGER,
     text TEXT,
     image BLOB,
+    sender_type TEXT CHECK(sender_type IN ('service_provider', 'pet_owner')),
+    sender_id INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY(bookid, no_update),
-    FOREIGN KEY(bookid) REFERENCES booking(bookid) ON UPDATE CASCADE ON DELETE CASCADE
+    FOREIGN KEY(bookid) REFERENCES booking(bookid) ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY(sender_id) REFERENCES users(userid) ON UPDATE CASCADE ON DELETE CASCADE
   );
 `);
 
