@@ -110,31 +110,25 @@ router.post('/', authMiddleware, validateServiceSubmission, (req, res) => {
         
         // Handle service type creation or validation
         if (serviceType) {
-            // Create new service type (service providers only)
-            const insertTypeStmt = db.prepare(`
-                INSERT INTO servicetype (type) VALUES (?)
+             // First, check if the service type already exists
+            const getTypeStmt = db.prepare(`
+                SELECT typeid FROM servicetype WHERE type = ?
             `);
-            
+            const existingType = getTypeStmt.get(serviceType.trim());
+            if (existingType) {
+                finalTypeId = existingType.typeid;
+            } else {
+                // Create new service type (service providers only)
+            const insertTypeStmt = db.prepare(`
+                    INSERT INTO servicetype (type) VALUES (?)
+                `);
             try {
                 const typeResult = insertTypeStmt.run(serviceType.trim());
-                finalTypeId = typeResult.lastInsertRowid;
+                 finalTypeId = typeResult.lastInsertRowid;
             } catch (error) {
-                // Handle duplicate service type
-                if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-                    // Get existing type ID
-                    const getTypeStmt = db.prepare(`
-                        SELECT typeid FROM servicetype WHERE type = ?
-                    `);
-                    const existingType = getTypeStmt.get(serviceType.trim());
-                    if (existingType) {
-                        finalTypeId = existingType.typeid;
-                    } else {
-                        return res.status(400).json({
-                            message: 'Unable to create or find service type'
-                        });
-                    }
-                } else {
-                    throw error;
+                return res.status(500).json({
+                message: 'Error creating new service type'
+                    });
                 }
             }
         } else if (typeid) {
