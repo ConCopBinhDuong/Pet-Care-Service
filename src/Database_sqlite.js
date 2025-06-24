@@ -53,12 +53,14 @@ db.exec(`
     subject TEXT,
     description TEXT,
     attachment BLOB,
-    respone BLOB,
+    response BLOB,
     status TEXT CHECK(status IN ('pending','solving','finished')),
     userid INTEGER,
     createtime DATETIME DEFAULT CURRENT_TIMESTAMP,
     managerid INTEGER,
     assigntime DATETIME,
+    bookingid INTEGER,
+    FOREIGN KEY(bookingid) REFERENCES booking(bookid) ON UPDATE CASCADE ON DELETE CASCADE,
     FOREIGN KEY(userid) REFERENCES users(userid) ON UPDATE CASCADE ON DELETE CASCADE,
     FOREIGN KEY(managerid) REFERENCES manager(id) ON UPDATE CASCADE ON DELETE CASCADE
   );
@@ -196,6 +198,7 @@ db.exec(`
     payment_method TEXT,
     status TEXT,
     FOREIGN KEY(poid) REFERENCES petowner(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    FOREIGN KEY(svid) REFERENCES service(serviceid) ON UPDATE CASCADE ON DELETE RESTRICT,
     FOREIGN KEY(svid, slot) REFERENCES timeslot(serviceid, slot) ON UPDATE CASCADE ON DELETE RESTRICT
   );
 `);

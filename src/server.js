@@ -27,6 +27,7 @@ import reviewsRoutes from './routes/reviews.js'
 import reportsRoutes from './routes/reports.js'
 import notificationsRoutes from './routes/notifications.js'
 import chatRoutes from './routes/chat.js'
+import ticketsRoutes from './routes/ticket.js'
 
 // Service imports
 import notificationScheduler from './services/notificationScheduler.js'
@@ -112,6 +113,7 @@ app.use('/api/reviews', authMiddleware,  reviewsRoutes);  // Requires full verif
 app.use('/api/reports', authMiddleware, reportsRoutes);  // Requires full verification
 app.use('/api/notifications', notificationsRoutes);  // Notification management
 app.use('/api/chat', authMiddleware, chatRoutes);  // Chat between pet owners and service providers
+app.use('/api/ticket', authMiddleware,  ticketsRoutes);  // Ticket management for support
 
 // Health check endpoint
 app.get('/health', (req, res) => {
