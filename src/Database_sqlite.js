@@ -248,7 +248,7 @@ db.exec(`
     notiid INTEGER PRIMARY KEY AUTOINCREMENT,
     text TEXT,
     userid INTEGER,
-    type TEXT DEFAULT 'general' CHECK(type IN ('general', 'diet', 'activity', 'service_approved', 'service_rejected', 'booking_accepted', 'booking_rejected', 'booking_expired', 'booking_request', 'booking_reminder')),
+    type TEXT DEFAULT 'general' CHECK(type IN ('general', 'diet', 'activity', 'service_approved', 'service_rejected', 'booking_accepted', 'booking_rejected', 'booking_expired', 'booking_request', 'booking_reminder', 'chat_message')),
     schedule_id INTEGER,
     related_id INTEGER,
     scheduled_time DATETIME,
