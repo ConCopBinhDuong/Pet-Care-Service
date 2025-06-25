@@ -14,11 +14,9 @@ const dbConfig = {
     ssl: process.env.NODE_ENV === 'production' ? {
         rejectUnauthorized: false
     } : false,
-    // Connection pool settings
+    // Connection pool settings (using valid mysql2 options only)
     connectionLimit: 10,
-    acquireTimeout: 20000,
-    timeout: 20000,
-    reconnect: true,
+    queueLimit: 0,
     charset: 'utf8mb4',
     timezone: '+00:00'
 };

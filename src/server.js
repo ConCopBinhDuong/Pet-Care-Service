@@ -33,48 +33,41 @@ import ticketsRoutes from './routes/ticket.js'
 import notificationScheduler from './services/notificationScheduler.js'
 
 const app = express() ; 
-const HTTP_PORT = process.env.PORT || 8383 ;
-const HTTPS_PORT = process.env.HTTPS_PORT || 8443 ;
-const NODE_ENV = process.env.NODE_ENV || 'development';
+const PORT = process.env.PORT || 10000;  // Render uses PORT env var
+const NODE_ENV = process.env.NODE_ENV || 'production';  // Default to production for Render
 
 console.log(`🚀 Starting Pet Care Service Server (${NODE_ENV})`) ; 
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// SSL Configuration - Using self-signed certificates (temporary)
-console.log('🔐 Loading self-signed SSL certificates (temporary configuration)');
-
-const sslDir = path.join(__dirname, '../ssl');
-const sslKeyPath = path.join(sslDir, 'server.key');
-const sslCertPath = path.join(sslDir, 'server.cert');
-
+// SSL Configuration - Skip for Render (handles HTTPS at load balancer)
+let useHTTPS = false;
 let httpsOptions = null;
 
-try {
-    // Verify self-signed certificate files exist
-    if (!fs.existsSync(sslKeyPath)) {
-        throw new Error(`SSL private key not found at: ${sslKeyPath}`);
-    }
-    if (!fs.existsSync(sslCertPath)) {
-        throw new Error(`SSL certificate not found at: ${sslCertPath}`);
-    }
-
-    httpsOptions = {
-        key: fs.readFileSync(sslKeyPath),
-        cert: fs.readFileSync(sslCertPath)
-    };
+if (NODE_ENV === 'development') {
+    console.log('🔐 Loading self-signed SSL certificates (development only)');
     
-
-} catch (error) {
-    console.error('Failed to load self-signed SSL certificates:', error.message);
-    console.log('\n To generate self-signed certificates, run:');
-    console.log('   chmod +x generate_ssl.sh');
-    console.log('   ./generate_ssl.sh');
-    console.log('\n Files should be located at:');
-    console.log(`   Key: ${sslKeyPath}`);
-    console.log(`   Cert: ${sslCertPath}`);
-    process.exit(1);
+    const sslDir = path.join(__dirname, '../ssl');
+    const sslKeyPath = path.join(sslDir, 'server.key');
+    const sslCertPath = path.join(sslDir, 'server.cert');
+    
+    try {
+        // Verify self-signed certificate files exist
+        if (fs.existsSync(sslKeyPath) && fs.existsSync(sslCertPath)) {
+            httpsOptions = {
+                key: fs.readFileSync(sslKeyPath),
+                cert: fs.readFileSync(sslCertPath)
+            };
+            useHTTPS = true;
+        } else {
+            console.log('📝 SSL certificates not found - running HTTP in development');
+        }
+    } catch (error) {
+        console.log('📝 SSL certificates not available - running HTTP in development');
+    }
+} else {
+    console.log('🌐 Production mode: HTTP server (Render handles HTTPS)');
 }
 
 // Security middleware (should be first)
@@ -89,10 +82,11 @@ app.use(express.urlencoded({ extended: true }));
 // Static file serving
 app.use(express.static(path.join(__dirname, '../public')));
 
-// Force HTTPS in production
-if (NODE_ENV === 'production' && httpsOptions) {
+// Force HTTPS redirect for production (Render handles HTTPS)
+if (NODE_ENV === 'production') {
     app.use((req, res, next) => {
-        if (!req.secure && req.get('x-forwarded-proto') !== 'https') {
+        // Render sets x-forwarded-proto header
+        if (req.get('x-forwarded-proto') !== 'https') {
             return res.redirect(301, `https://${req.get('host')}${req.url}`);
         }
         next();
@@ -131,37 +125,47 @@ app.get('/health', (req, res) => {
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-// Start HTTPS server only
-if (!httpsOptions) {
-    console.error(' SSL certificates are required. Server cannot start without HTTPS.');
-    process.exit(1);
+// Start server (HTTPS in development, HTTP in production via Render)
+if (useHTTPS && httpsOptions) {
+    // Development with HTTPS
+    https.createServer(httpsOptions, app).listen(PORT, async () => {
+        console.log(`HTTPS Server running on port: ${PORT} (development)`);
+        console.log(`Secure API: https://localhost:${PORT}/api`);
+        console.log(`Health check: https://localhost:${PORT}/health`);
+        console.log(`Browser warning expected with self-signed certificates`);
+        
+        // Start notification scheduler
+        console.log('🔔 Starting notification scheduler...');
+        notificationScheduler.start();
+        
+        console.log('\n💡 Development Tips:');
+        console.log('   • Accept browser security warning for self-signed certs');
+        console.log('   • Use "Advanced" → "Proceed to localhost" in browsers');
+        console.log('   • Add certificate exception for testing');
+    });
+} else {
+    // Production HTTP (Render handles HTTPS)
+    app.listen(PORT, '0.0.0.0', async () => {
+        console.log(`✅ Server running on port ${PORT}`);
+        console.log(`Environment: ${NODE_ENV}`);
+        console.log(`API available at: ${NODE_ENV === 'production' ? 'https' : 'http'}://localhost:${PORT}/api`);
+        console.log(`Health check: ${NODE_ENV === 'production' ? 'https' : 'http'}://localhost:${PORT}/health`);
+        
+        if (NODE_ENV === 'production') {
+            console.log('🌐 HTTPS handled by Render load balancer');
+        }
+        
+        // Start notification scheduler
+        console.log('🔔 Starting notification scheduler...');
+        notificationScheduler.start();
+    });
 }
 
-// https.createServer(httpsOptions, app).listen(HTTPS_PORT, async () => {
-//     console.log(`HTTPS Server running on port: ${HTTPS_PORT} (self-signed certificates)`);
-//     console.log(`Secure API: https://localhost:${HTTPS_PORT}/api`);
-//     console.log(`Health check: https://localhost:${HTTPS_PORT}/health`);
-//     console.log(`Browser warning expected with self-signed certificates`);
-//     console.log(`Access via: https://localhost:${HTTPS_PORT}`);
-//     console.log(`HTTPS-only mode: No HTTP server running`);
-    
+
+// app.listen(HTTP_PORT, '0.0.0.0', async () => {
+//     console.log(`✅ Server running on http://0.0.0.0:${PORT}`);
+
 //     // Start notification scheduler
 //     console.log('🔔 Starting notification scheduler...');
 //     notificationScheduler.start();
-    
-//     if (NODE_ENV === 'development') {
-//         console.log('\n💡 Development Tips:');
-//         console.log('   • Accept browser security warning for self-signed certs');
-//         console.log('   • Use "Advanced" → "Proceed to localhost" in browsers');
-//         console.log('   • Add certificate exception for testing');
-//     }
 // });
-
-
-app.listen(HTTP_PORT, '0.0.0.0', async () => {
-    console.log(`✅ Server running on http://0.0.0.0:${PORT}`);
-
-    // Start notification scheduler
-    console.log('🔔 Starting notification scheduler...');
-    notificationScheduler.start();
-});
