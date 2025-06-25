@@ -31,12 +31,20 @@ import ticketsRoutes from './routes/ticket.js'
 
 // Service imports
 import notificationScheduler from './services/notificationScheduler.js'
+import { testConnection } from './db.js'
 
 const app = express() ; 
 const PORT = process.env.PORT || 10000;  // Render uses PORT env var
 const NODE_ENV = process.env.NODE_ENV || 'production';  // Default to production for Render
 
 console.log(`🚀 Starting Pet Care Service Server (${NODE_ENV})`) ; 
+console.log(`📍 Port: ${PORT}`);
+console.log(`🌍 Environment variables loaded:`, {
+    DB_HOST: process.env.DB_HOST ? '✅ Set' : '❌ Missing',
+    DB_USER: process.env.DB_USER ? '✅ Set' : '❌ Missing', 
+    DB_NAME: process.env.DB_NAME ? '✅ Set' : '❌ Missing',
+    JWT_SECRET: process.env.JWT_SECRET ? '✅ Set' : '❌ Missing'
+}); 
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -110,13 +118,50 @@ app.use('/api/chat', authMiddleware, chatRoutes);  // Chat between pet owners an
 app.use('/api/ticket', authMiddleware,  ticketsRoutes);  // Ticket management for support
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', async (req, res) => {
+    try {
+        // Test database connection
+        const dbConnected = await testConnection();
+        
+        res.status(dbConnected ? 200 : 503).json({
+            success: true,
+            message: 'Pet Care Service is running',
+            secure: req.secure,
+            protocol: req.protocol,
+            environment: NODE_ENV,
+            database: dbConnected ? 'connected' : 'disconnected',
+            port: PORT,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(503).json({
+            success: false,
+            message: 'Health check failed',
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
+// Debug endpoint for troubleshooting Render deployment
+app.get('/debug', (req, res) => {
     res.json({
         success: true,
-        message: 'Pet Care Service is running',
-        secure: req.secure,
-        protocol: req.protocol,
-        environment: NODE_ENV,
+        message: 'Debug information',
+        environment: {
+            NODE_ENV: process.env.NODE_ENV,
+            PORT: process.env.PORT,
+            DB_HOST: process.env.DB_HOST ? 'Set' : 'Missing',
+            DB_USER: process.env.DB_USER ? 'Set' : 'Missing',
+            DB_NAME: process.env.DB_NAME ? 'Set' : 'Missing',
+            JWT_SECRET: process.env.JWT_SECRET ? 'Set' : 'Missing'
+        },
+        server: {
+            port: PORT,
+            nodeEnv: NODE_ENV,
+            platform: process.platform,
+            nodeVersion: process.version
+        },
         timestamp: new Date().toISOString()
     });
 });
@@ -126,7 +171,7 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 // Start server (HTTPS in development, HTTP in production via Render)
-if (useHTTPS && httpsOptions) {
+if (useHTTPS && httpsOptions && NODE_ENV === 'development') {
     // Development with HTTPS
     https.createServer(httpsOptions, app).listen(PORT, async () => {
         console.log(`HTTPS Server running on port: ${PORT} (development)`);
@@ -136,7 +181,11 @@ if (useHTTPS && httpsOptions) {
         
         // Start notification scheduler
         console.log('🔔 Starting notification scheduler...');
-        notificationScheduler.start();
+        try {
+            notificationScheduler.start();
+        } catch (error) {
+            console.error('⚠️ Notification scheduler failed to start:', error.message);
+        }
         
         console.log('\n💡 Development Tips:');
         console.log('   • Accept browser security warning for self-signed certs');
@@ -144,22 +193,72 @@ if (useHTTPS && httpsOptions) {
         console.log('   • Add certificate exception for testing');
     });
 } else {
-    // Production HTTP (Render handles HTTPS)
-    app.listen(PORT, '0.0.0.0', async () => {
-        console.log(`✅ Server running on port ${PORT}`);
-        console.log(`Environment: ${NODE_ENV}`);
-        console.log(`API available at: ${NODE_ENV === 'production' ? 'https' : 'http'}://localhost:${PORT}/api`);
-        console.log(`Health check: ${NODE_ENV === 'production' ? 'https' : 'http'}://localhost:${PORT}/health`);
+    // Production HTTP (Render handles HTTPS) - Always bind to 0.0.0.0
+    const server = app.listen(PORT, '0.0.0.0', async () => {
+        console.log(`✅ Server successfully started!`);
+        console.log(`🌐 Running on port: ${PORT}`);
+        console.log(`📍 Environment: ${NODE_ENV}`);
+        console.log(`🔗 Health check: /health`);
         
         if (NODE_ENV === 'production') {
-            console.log('🌐 HTTPS handled by Render load balancer');
+            console.log('🔒 HTTPS handled by Render load balancer');
         }
         
-        // Start notification scheduler
+        // Test database connection
+        const dbConnected = await testConnection();
+        if (!dbConnected) {
+            console.error('❌ Database connection failed - server may not work properly');
+            // Don't exit in production, let the server try to handle requests
+        }
+        
+        // Start notification scheduler with error handling
         console.log('🔔 Starting notification scheduler...');
-        notificationScheduler.start();
+        try {
+            notificationScheduler.start();
+            console.log('✅ Notification scheduler started successfully');
+        } catch (error) {
+            console.error('⚠️ Notification scheduler failed to start:', error.message);
+            // Don't crash the server if scheduler fails
+        }
+        
+        console.log('🎉 Server ready to accept connections!');
+    });
+
+    // Handle server errors
+    server.on('error', (error) => {
+        console.error('❌ Server error:', error);
+        if (error.code === 'EADDRINUSE') {
+            console.error(`Port ${PORT} is already in use`);
+        }
+        process.exit(1);
+    });
+
+    // Graceful shutdown
+    process.on('SIGTERM', () => {
+        console.log('📴 Received SIGTERM, shutting down gracefully');
+        server.close(() => {
+            console.log('✅ Server closed');
+            process.exit(0);
+        });
     });
 }
+
+// Global error handlers to prevent crashes
+process.on('uncaughtException', (error) => {
+    console.error('❌ Uncaught Exception:', error);
+    // Don't exit in production - let the process continue
+    if (NODE_ENV !== 'production') {
+        process.exit(1);
+    }
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+    // Don't exit in production - let the process continue
+    if (NODE_ENV !== 'production') {
+        process.exit(1);
+    }
+});
 
 
 // app.listen(HTTP_PORT, '0.0.0.0', async () => {

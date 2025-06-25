@@ -182,6 +182,24 @@ class Database {
     }
 }
 
+// Test database connection
+export async function testConnection() {
+    try {
+        console.log('🔍 Testing database connection...');
+        const [rows] = await pool.execute('SELECT 1 as test');
+        console.log('✅ Database connection successful');
+        return true;
+    } catch (error) {
+        console.error('❌ Database connection failed:', error.message);
+        console.error('🔧 Check your database configuration:');
+        console.error(`   Host: ${dbConfig.host}`);
+        console.error(`   Port: ${dbConfig.port}`);
+        console.error(`   Database: ${dbConfig.database}`);
+        console.error(`   User: ${dbConfig.user}`);
+        return false;
+    }
+}
+
 // Create and export database instance
 const db = new Database();
 
