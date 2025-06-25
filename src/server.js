@@ -35,10 +35,12 @@ import { testConnection } from './db.js'
 
 const app = express() ; 
 const PORT = process.env.PORT || 10000;  // Render uses PORT env var
-const NODE_ENV = process.env.NODE_ENV || 'production';  // Default to production for Render
+// Force production mode on Render (Render doesn't set NODE_ENV by default)
+const NODE_ENV = process.env.NODE_ENV || (process.env.RENDER || process.env.RENDER_SERVICE_ID ? 'production' : 'development');
 
 console.log(`🚀 Starting Pet Care Service Server (${NODE_ENV})`) ; 
 console.log(`📍 Port: ${PORT}`);
+console.log(`🔍 Render Detection: ${process.env.RENDER_SERVICE_ID ? 'Running on Render' : 'Local environment'}`);
 console.log(`🌍 Environment variables loaded:`, {
     DB_HOST: process.env.DB_HOST ? '✅ Set' : '❌ Missing',
     DB_USER: process.env.DB_USER ? '✅ Set' : '❌ Missing', 
@@ -53,7 +55,10 @@ const __dirname = dirname(__filename);
 let useHTTPS = false;
 let httpsOptions = null;
 
-if (NODE_ENV === 'development') {
+// Force HTTP mode if running on Render
+const isRender = process.env.RENDER_SERVICE_ID || process.env.RENDER;
+
+if (NODE_ENV === 'development' && !isRender) {
     console.log('🔐 Loading self-signed SSL certificates (development only)');
     
     const sslDir = path.join(__dirname, '../ssl');
@@ -75,7 +80,7 @@ if (NODE_ENV === 'development') {
         console.log('📝 SSL certificates not available - running HTTP in development');
     }
 } else {
-    console.log('🌐 Production mode: HTTP server (Render handles HTTPS)');
+    console.log(`🌐 ${isRender ? 'Render' : 'Production'} mode: HTTP server (${isRender ? 'Render' : 'Load balancer'} handles HTTPS)`);
 }
 
 // Security middleware (should be first)
@@ -170,11 +175,11 @@ app.get('/debug', (req, res) => {
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-// Start server (HTTPS in development, HTTP in production via Render)
-if (useHTTPS && httpsOptions && NODE_ENV === 'development') {
-    // Development with HTTPS
+// Start server (HTTPS in local development only, HTTP everywhere else)
+if (useHTTPS && httpsOptions && NODE_ENV === 'development' && !isRender) {
+    // Local development with HTTPS
     https.createServer(httpsOptions, app).listen(PORT, async () => {
-        console.log(`HTTPS Server running on port: ${PORT} (development)`);
+        console.log(`HTTPS Server running on port: ${PORT} (local development)`);
         console.log(`Secure API: https://localhost:${PORT}/api`);
         console.log(`Health check: https://localhost:${PORT}/health`);
         console.log(`Browser warning expected with self-signed certificates`);
@@ -193,15 +198,17 @@ if (useHTTPS && httpsOptions && NODE_ENV === 'development') {
         console.log('   • Add certificate exception for testing');
     });
 } else {
-    // Production HTTP (Render handles HTTPS) - Always bind to 0.0.0.0
+    // Production HTTP (for Render) or local development HTTP
     const server = app.listen(PORT, '0.0.0.0', async () => {
         console.log(`✅ Server successfully started!`);
-        console.log(`🌐 Running on port: ${PORT}`);
+        console.log(`🌐 Running on port: ${PORT} (HTTP)`);
         console.log(`📍 Environment: ${NODE_ENV}`);
         console.log(`🔗 Health check: /health`);
+        console.log(`🔗 Debug info: /debug`);
         
-        if (NODE_ENV === 'production') {
+        if (isRender) {
             console.log('🔒 HTTPS handled by Render load balancer');
+            console.log('🚀 Server bound to 0.0.0.0 for Render compatibility');
         }
         
         // Test database connection
