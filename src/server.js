@@ -137,22 +137,31 @@ if (!httpsOptions) {
     process.exit(1);
 }
 
-https.createServer(httpsOptions, app).listen(HTTPS_PORT, async () => {
-    console.log(`HTTPS Server running on port: ${HTTPS_PORT} (self-signed certificates)`);
-    console.log(`Secure API: https://localhost:${HTTPS_PORT}/api`);
-    console.log(`Health check: https://localhost:${HTTPS_PORT}/health`);
-    console.log(`Browser warning expected with self-signed certificates`);
-    console.log(`Access via: https://localhost:${HTTPS_PORT}`);
-    console.log(`HTTPS-only mode: No HTTP server running`);
+// https.createServer(httpsOptions, app).listen(HTTPS_PORT, async () => {
+//     console.log(`HTTPS Server running on port: ${HTTPS_PORT} (self-signed certificates)`);
+//     console.log(`Secure API: https://localhost:${HTTPS_PORT}/api`);
+//     console.log(`Health check: https://localhost:${HTTPS_PORT}/health`);
+//     console.log(`Browser warning expected with self-signed certificates`);
+//     console.log(`Access via: https://localhost:${HTTPS_PORT}`);
+//     console.log(`HTTPS-only mode: No HTTP server running`);
     
+//     // Start notification scheduler
+//     console.log('🔔 Starting notification scheduler...');
+//     notificationScheduler.start();
+    
+//     if (NODE_ENV === 'development') {
+//         console.log('\n💡 Development Tips:');
+//         console.log('   • Accept browser security warning for self-signed certs');
+//         console.log('   • Use "Advanced" → "Proceed to localhost" in browsers');
+//         console.log('   • Add certificate exception for testing');
+//     }
+// });
+
+
+app.listen(PORT, '0.0.0.0', async () => {
+    console.log(`✅ Server running on http://0.0.0.0:${PORT}`);
+
     // Start notification scheduler
     console.log('🔔 Starting notification scheduler...');
     notificationScheduler.start();
-    
-    if (NODE_ENV === 'development') {
-        console.log('\n💡 Development Tips:');
-        console.log('   • Accept browser security warning for self-signed certs');
-        console.log('   • Use "Advanced" → "Proceed to localhost" in browsers');
-        console.log('   • Add certificate exception for testing');
-    }
 });
