@@ -2,10 +2,13 @@
 # PET CARE SERVICE BACKEND - COMPREHENSIVE API TEST FILE
 # ===================================================================
 # This file contains tests for ALL endpoints in the Pet Care Service Backend
-# Base URL: https://localhost:8443/api
+# DEPLOYED URL: https://pet-care-service-l141.onrender.com/api
+# LOCAL URL: https://localhost:8443/api
 # ===================================================================
 
-@baseUrl = https://localhost:8443/api
+# Switch between deployed and local for testing
+@baseUrl = https://pet-care-service-l141.onrender.com/api
+# @baseUrl = https://localhost:8443/api
 @petOwnerToken = 
 @serviceProviderToken = 
 @managerToken = 

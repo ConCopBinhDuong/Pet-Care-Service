@@ -95,6 +95,11 @@ app.use(express.urlencoded({ extended: true }));
 // Static file serving
 app.use(express.static(path.join(__dirname, '../public')));
 
+
+//Dong ma HM keu them
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+
 // Force HTTPS redirect for production (Render handles HTTPS)
 if (NODE_ENV === 'production') {
     app.use((req, res, next) => {
