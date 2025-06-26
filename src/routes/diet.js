@@ -122,29 +122,29 @@ router.post('/pet/:petId', validateDietCreation, async (req, res) => {
             });
         }
 
-        // Start transaction
-        await db.beginTransaction();
-
+        // Use the transaction wrapper for proper transaction handling
         try {
-            // Insert new diet
-            const result = await db.execute(`
-                INSERT INTO diet (name, amount, description, petid)
-                VALUES (?, ?, ?, ?)
-            `, [
-                name, 
-                amount || null,
-                description || null, 
-                petId
-            ]);
+            const newDiet = await db.transaction(async (connection) => {
+                // Insert new diet
+                const [result] = await connection.execute(`
+                    INSERT INTO diet (name, amount, description, petid)
+                    VALUES (?, ?, ?, ?)
+                `, [
+                    name, 
+                    amount || null,
+                    description || null, 
+                    petId
+                ]);
 
-            await db.commit();
+                // Get the newly created diet
+                const [dietRows] = await connection.execute(`
+                    SELECT dietid, name, amount, description, petid
+                    FROM diet 
+                    WHERE dietid = ?
+                `, [result.insertId]);
 
-            // Get the newly created diet
-            const newDiet = await db.get(`
-                SELECT dietid, name, amount, description, petid
-                FROM diet 
-                WHERE dietid = ?
-            `, [result.insertId]);
+                return dietRows[0];
+            });
 
             res.status(201).json({
                 message: 'Diet added successfully',
@@ -152,7 +152,6 @@ router.post('/pet/:petId', validateDietCreation, async (req, res) => {
             });
 
         } catch (transactionErr) {
-            await db.rollback();
             throw transactionErr;
         }
 
@@ -269,23 +268,23 @@ router.put('/:dietId', validateDietUpdate, async (req, res) => {
             return res.status(400).json({ message: 'No valid fields to update' });
         }
 
-        // Start transaction
-        await db.beginTransaction();
-
+        // Use the transaction wrapper for proper transaction handling
         try {
-            const setClause = Object.keys(dietUpdates).map(key => `${key} = ?`).join(', ');
-            const values = Object.values(dietUpdates);
-            
-            await db.execute(`UPDATE diet SET ${setClause} WHERE dietid = ?`, [...values, dietId]);
+            const updatedDiet = await db.transaction(async (connection) => {
+                const setClause = Object.keys(dietUpdates).map(key => `${key} = ?`).join(', ');
+                const values = Object.values(dietUpdates);
+                
+                await connection.execute(`UPDATE diet SET ${setClause} WHERE dietid = ?`, [...values, dietId]);
 
-            await db.commit();
+                // Get updated diet
+                const [dietRows] = await connection.execute(`
+                    SELECT dietid, name, amount, description, petid
+                    FROM diet 
+                    WHERE dietid = ?
+                `, [dietId]);
 
-            // Get updated diet
-            const updatedDiet = await db.get(`
-                SELECT dietid, name, amount, description, petid
-                FROM diet 
-                WHERE dietid = ?
-            `, [dietId]);
+                return dietRows[0];
+            });
 
             res.status(200).json({
                 message: 'Diet updated successfully',
@@ -293,7 +292,6 @@ router.put('/:dietId', validateDietUpdate, async (req, res) => {
             });
 
         } catch (transactionErr) {
-            await db.rollback();
             throw transactionErr;
         }
 
@@ -321,54 +319,56 @@ router.delete('/:dietId', async (req, res) => {
             return res.status(400).json({ message: 'Invalid diet ID' });
         }
 
-        // Start transaction
-        await db.beginTransaction();
-
+        // Use the transaction wrapper for proper transaction handling
         try {
-            // Get diet info before deletion and verify ownership
-            const diet = await db.get(`
-                SELECT d.dietid, d.name, d.amount, p.userid, p.name as pet_name
-                FROM diet d
-                JOIN pet p ON d.petid = p.petid
-                WHERE d.dietid = ?
-            `, [dietId]);
+            const deletedDiet = await db.transaction(async (connection) => {
+                // Get diet info before deletion and verify ownership
+                const [dietRows] = await connection.execute(`
+                    SELECT d.dietid, d.name, d.amount, p.userid, p.name as pet_name
+                    FROM diet d
+                    JOIN pet p ON d.petid = p.petid
+                    WHERE d.dietid = ?
+                `, [dietId]);
+                
+                const diet = dietRows[0];
 
-            if (!diet) {
-                await db.rollback();
-                return res.status(404).json({ message: 'Diet not found' });
-            }
+                if (!diet) {
+                    throw new Error('Diet not found');
+                }
 
-            if (diet.userid !== userId) {
-                await db.rollback();
-                return res.status(403).json({ 
-                    message: 'Access denied. You can only delete diets for your own pets.' 
-                });
-            }
+                if (diet.userid !== userId) {
+                    throw new Error('Access denied. You can only delete diets for your own pets.');
+                }
 
-            // Delete diet (CASCADE DELETE will handle related records)
-            const result = await db.execute(`DELETE FROM diet WHERE dietid = ?`, [dietId]);
+                // Delete diet (CASCADE DELETE will handle related records)
+                const [result] = await connection.execute(`DELETE FROM diet WHERE dietid = ?`, [dietId]);
 
-            if (result.affectedRows === 0) {
-                await db.rollback();
-                return res.status(404).json({ message: 'Diet not found or already deleted' });
-            }
+                if (result.affectedRows === 0) {
+                    throw new Error('Diet not found or already deleted');
+                }
 
-            await db.commit();
+                return diet;
+            });
 
-            console.log(`Diet deleted: ${diet.name} for pet ${diet.pet_name} by user ${userId}`);
+            console.log(`Diet deleted: ${deletedDiet.name} for pet ${deletedDiet.pet_name} by user ${userId}`);
 
             res.status(200).json({
                 message: 'Diet deleted successfully',
                 deletedDiet: {
-                    id: diet.dietid,
-                    name: diet.name,
-                    amount: diet.amount,
-                    pet_name: diet.pet_name
+                    id: deletedDiet.dietid,
+                    name: deletedDiet.name,
+                    amount: deletedDiet.amount,
+                    pet_name: deletedDiet.pet_name
                 }
             });
 
         } catch (transactionErr) {
-            await db.rollback();
+            if (transactionErr.message === 'Diet not found' || transactionErr.message === 'Diet not found or already deleted') {
+                return res.status(404).json({ message: transactionErr.message });
+            }
+            if (transactionErr.message.includes('Access denied')) {
+                return res.status(403).json({ message: transactionErr.message });
+            }
             throw transactionErr;
         }
 

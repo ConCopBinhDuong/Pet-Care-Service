@@ -43,12 +43,14 @@ router.get('/', async (req, res) => {
             `, [userId]);
             
             if (serviceProviderData) {
-                profileData.businessName = serviceProviderData.business_name;
+                profileData.business_name = serviceProviderData.business_name;
                 profileData.logo = serviceProviderData.logo;
                 profileData.phone = serviceProviderData.phone;
                 profileData.description = serviceProviderData.description;
                 profileData.address = serviceProviderData.address;
                 profileData.website = serviceProviderData.website;
+                // Extract city from address or set a default
+                profileData.city = serviceProviderData.address ? serviceProviderData.address.split(',').pop()?.trim() : '';
             }
 
         } else if (userRole === 'Manager') {
@@ -57,6 +59,7 @@ router.get('/', async (req, res) => {
         }
 
         res.status(200).json({ 
+            success: true,
             message: 'Profile retrieved successfully',
             profile: profileData
         });
@@ -329,82 +332,141 @@ router.get('/providers', async (req, res) => {
 
 // Update user profile (protected route)
 router.put('/', validateProfileUpdate, async (req, res) => {
+    console.log('=== PROFILE UPDATE REQUEST ===');
+    console.log('Headers:', req.headers);
+    console.log('User from middleware:', req.user);
+    console.log('Request body:', req.body);
+    
     try {
-        const userId = req.user.userid;
-        const userRole = req.user.role;
+        const userId = req.user?.userid;
+        const userRole = req.user?.role;
         const updates = req.body;
 
-        // Start transaction
-        await db.beginTransaction();
+        if (!userId) {
+            console.error('No user ID found in request');
+            return res.status(401).json({ 
+                message: 'User not authenticated',
+                error: 'No user ID found in request'
+            });
+        }
 
-        // Update basic user info if provided
-        const allowedUserFields = ['name', 'gender'];
-        const userUpdates = {};
-        
-        allowedUserFields.forEach(field => {
-            if (updates[field] !== undefined) {
-                userUpdates[field] = updates[field];
+        console.log('Profile update request:', {
+            userId,
+            userRole,
+            updates: JSON.stringify(updates, null, 2)
+        });
+
+        // Use the transaction wrapper for proper transaction handling
+        await db.transaction(async (connection) => {
+            // Update basic user info if provided
+            const allowedUserFields = ['name', 'gender'];
+            const userUpdates = {};
+            
+            allowedUserFields.forEach(field => {
+                if (updates[field] !== undefined) {
+                    userUpdates[field] = updates[field];
+                }
+            });
+
+            if (Object.keys(userUpdates).length > 0) {
+                const setClause = Object.keys(userUpdates).map(key => `${key} = ?`).join(', ');
+                const values = Object.values(userUpdates);
+                
+                // Use the connection's execute method for MySQL transactions
+                const [result] = await connection.execute(`UPDATE user SET ${setClause} WHERE userid = ?`, [...values, userId]);
+            }
+
+            // Update role-specific data
+            if (userRole === 'Pet owner') {
+                const allowedPetOwnerFields = ['phone', 'city', 'address'];
+                const petOwnerUpdates = {};
+                
+                allowedPetOwnerFields.forEach(field => {
+                    if (updates[field] !== undefined) {
+                        petOwnerUpdates[field] = updates[field];
+                    }
+                });
+
+                if (Object.keys(petOwnerUpdates).length > 0) {
+                    const setClause = Object.keys(petOwnerUpdates).map(key => `${key} = ?`).join(', ');
+                    const values = Object.values(petOwnerUpdates);
+                    
+                    const [result] = await connection.execute(`UPDATE petowner SET ${setClause} WHERE id = ?`, [...values, userId]);
+                }
+
+            } else if (userRole === 'Service provider') {
+                const allowedProviderFields = ['business_name', 'logo', 'phone', 'description', 'address', 'website'];
+                const providerUpdates = {};
+                
+                allowedProviderFields.forEach(field => {
+                    if (updates[field] !== undefined) {
+                        providerUpdates[field] = updates[field];
+                    }
+                });
+
+                if (Object.keys(providerUpdates).length > 0) {
+                    const setClause = Object.keys(providerUpdates).map(key => `${key} = ?`).join(', ');
+                    const values = Object.values(providerUpdates);
+                    
+                    const [result] = await connection.execute(`UPDATE serviceprovider SET ${setClause} WHERE id = ?`, [...values, userId]);
+                }
             }
         });
 
-        if (Object.keys(userUpdates).length > 0) {
-            const setClause = Object.keys(userUpdates).map(key => `${key} = ?`).join(', ');
-            const values = Object.values(userUpdates);
-            
-            await db.execute(`UPDATE user SET ${setClause} WHERE userid = ?`, [...values, userId]);
-        }
+        // Fetch the updated profile data to return to the frontend
+        const updatedUser = await db.get(`SELECT userid, name, email, gender, role FROM user WHERE userid = ?`, [userId]);
+        let updatedProfile = {
+            id: updatedUser.userid,
+            name: updatedUser.name,
+            email: updatedUser.email,
+            gender: updatedUser.gender,
+            role: updatedUser.role
+        };
 
-        // Update role-specific data
+        // Fetch updated role-specific data
         if (userRole === 'Pet owner') {
-            const allowedPetOwnerFields = ['phone', 'city', 'address'];
-            const petOwnerUpdates = {};
-            
-            allowedPetOwnerFields.forEach(field => {
-                if (updates[field] !== undefined) {
-                    petOwnerUpdates[field] = updates[field];
-                }
-            });
-
-            if (Object.keys(petOwnerUpdates).length > 0) {
-                const setClause = Object.keys(petOwnerUpdates).map(key => `${key} = ?`).join(', ');
-                const values = Object.values(petOwnerUpdates);
-                
-                await db.execute(`UPDATE petowner SET ${setClause} WHERE id = ?`, [...values, userId]);
+            const petOwnerData = await db.get(`SELECT phone, city, address FROM petowner WHERE id = ?`, [userId]);
+            if (petOwnerData) {
+                updatedProfile.phone = petOwnerData.phone;
+                updatedProfile.city = petOwnerData.city;
+                updatedProfile.address = petOwnerData.address;
             }
-
         } else if (userRole === 'Service provider') {
-            const allowedProviderFields = ['business_name', 'logo', 'phone', 'description', 'address', 'website'];
-            const providerUpdates = {};
-            
-            allowedProviderFields.forEach(field => {
-                if (updates[field] !== undefined) {
-                    providerUpdates[field] = updates[field];
-                }
-            });
-
-            if (Object.keys(providerUpdates).length > 0) {
-                const setClause = Object.keys(providerUpdates).map(key => `${key} = ?`).join(', ');
-                const values = Object.values(providerUpdates);
-                
-                await db.execute(`UPDATE serviceprovider SET ${setClause} WHERE id = ?`, [...values, userId]);
+            const serviceProviderData = await db.get(`
+                SELECT business_name, logo, phone, description, address, website 
+                FROM serviceprovider WHERE id = ?
+            `, [userId]);
+            if (serviceProviderData) {
+                updatedProfile.business_name = serviceProviderData.business_name;
+                updatedProfile.logo = serviceProviderData.logo;
+                updatedProfile.phone = serviceProviderData.phone;
+                updatedProfile.description = serviceProviderData.description;
+                updatedProfile.address = serviceProviderData.address;
+                updatedProfile.website = serviceProviderData.website;
+                updatedProfile.city = serviceProviderData.address ? serviceProviderData.address.split(',').pop()?.trim() : '';
             }
         }
-
-        await db.commit();
 
         res.status(200).json({ 
-            message: 'Profile updated successfully'
+            success: true,
+            message: 'Profile updated successfully',
+            profile: updatedProfile
         });
 
     } catch (err) {
-        console.error('Profile update error:', err.message);
-        await db.rollback();
+        console.error('Profile update error:', err);
+        console.error('Stack trace:', err.stack);
+        console.error('Error message:', err.message);
         
         if (err.message.includes('UNIQUE constraint failed')) {
             return res.status(409).json({ message: 'Phone number or email already in use' });
         }
         
-        res.status(500).json({ message: 'Internal server error' });
+        res.status(500).json({ 
+            message: 'Internal server error',
+            error: err.message,
+            details: 'Check server logs for more information'
+        });
     }
 });
 
@@ -414,42 +476,45 @@ router.delete('/', async (req, res) => {
         const userId = req.user.userid;
         const userRole = req.user.role;
 
-        // Start transaction
-        await db.beginTransaction();
+        // Use the transaction wrapper for proper transaction handling
+        const result = await db.transaction(async (connection) => {
+            // First check if user exists
+            const [userRows] = await connection.execute(`SELECT userid, name, email, role FROM user WHERE userid = ?`, [userId]);
+            const user = userRows[0];
 
-        // First check if user exists
-        const user = await db.get(`SELECT userid, name, email, role FROM user WHERE userid = ?`, [userId]);
+            if (!user) {
+                throw new Error('User not found');
+            }
 
-        if (!user) {
-            await db.rollback();
-            return res.status(404).json({ message: 'User not found' });
-        }
+            // Delete user - CASCADE DELETE will automatically remove related records
+            const [deleteResult] = await connection.execute(`DELETE FROM user WHERE userid = ?`, [userId]);
 
-        // Delete user - CASCADE DELETE will automatically remove related records
-        const result = await db.execute(`DELETE FROM user WHERE userid = ?`, [userId]);
+            if (deleteResult.affectedRows === 0) {
+                throw new Error('User not found or already deleted');
+            }
 
-        if (result.affectedRows === 0) {
-            await db.rollback();
-            return res.status(404).json({ message: 'User not found or already deleted' });
-        }
+            return user;
+        });
 
-        await db.commit();
-
-        console.log(`User account deleted: ${user.email} (${user.role})`);
+        console.log(`User account deleted: ${result.email} (${result.role})`);
 
         res.status(200).json({ 
             message: 'Account deleted successfully',
             deletedUser: {
-                id: user.userid,
-                name: user.name,
-                email: user.email,
-                role: user.role
+                id: result.userid,
+                name: result.name,
+                email: result.email,
+                role: result.role
             }
         });
 
     } catch (err) {
         console.error('Account deletion error:', err.message);
-        await db.rollback();
+        
+        if (err.message === 'User not found' || err.message === 'User not found or already deleted') {
+            return res.status(404).json({ message: err.message });
+        }
+        
         res.status(500).json({ message: 'Internal server error' });
     }
 });

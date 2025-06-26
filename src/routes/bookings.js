@@ -206,25 +206,25 @@ router.post('/', validateBookingCreation, async (req, res) => {
 
         let bookingId;
         try {
-            await db.beginTransaction();
+            // Use the transaction wrapper for proper transaction handling
+            bookingId = await db.transaction(async (connection) => {
+                // Create the booking
+                const [bookingResult] = await connection.execute(`
+                    INSERT INTO booking (poid, svid, slot, servedate, payment_method, status)
+                    VALUES (?, ?, ?, ?, ?, 'pending')
+                `, [userId, serviceid, slot, servedate, payment_method]);
+                const newBookingId = bookingResult.insertId;
 
-            // Create the booking
-            const bookingResult = await db.execute(`
-                INSERT INTO booking (poid, svid, slot, servedate, payment_method, status)
-                VALUES (?, ?, ?, ?, ?, 'pending')
-            `, [userId, serviceid, slot, servedate, payment_method]);
-            bookingId = bookingResult.insertId;
+                // Link pets to the booking
+                for (let petId of petIds) {
+                    await connection.execute(`
+                        INSERT INTO booking_pet (bookid, petid) VALUES (?, ?)
+                    `, [newBookingId, petId]);
+                }
 
-            // Link pets to the booking
-            for (let petId of petIds) {
-                await db.execute(`
-                    INSERT INTO booking_pet (bookid, petid) VALUES (?, ?)
-                `, [bookingId, petId]);
-            }
-
-            await db.commit();
+                return newBookingId;
+            });
         } catch (err) {
-            await db.rollback();
             throw err;
         }
 

@@ -5,7 +5,7 @@ create table user (
 	userid int auto_increment,
     name varchar(100) not null,
     email varchar(100) not null unique,
-    password varchar(20) not null,
+    password varchar(255) not null,
     gender ENUM('Male', 'Female', 'Other'),
     role enum('Pet owner', 'Service provider', 'Manager'),
     email_verified enum('0','1') default '0',

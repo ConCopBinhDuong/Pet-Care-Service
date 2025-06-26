@@ -1,83 +1,12 @@
-<!-- public/index.html -->
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pet Care Service Backend</title>
-  <style>
-    body { 
-      font-family: Arial, sans-serif; 
-      max-width: 800px; 
-      margin: 0 auto; 
-      padding: 20px; 
-      background-color: #f5f5f5;
-    }
-    .container { 
-      background: white; 
-      padding: 30px; 
-      border-radius: 10px; 
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    }
-    .status { 
-      padding: 10px; 
-      border-radius: 5px; 
-      margin: 10px 0; 
-    }
-    .success { 
-      background-color: #d4edda; 
-      color: #155724; 
-      border: 1px solid #c3e6cb;
-    }
-    .endpoint { 
-      background-color: #f8f9fa; 
-      padding: 10px; 
-      margin: 5px 0; 
-      border-left: 4px solid #007bff; 
-      font-family: monospace;
-    }
-    a { color: #007bff; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>🐾 Pet Care Service Backend</h1>
-    <div class="status success">
-      ✅ Backend API is running successfully!
-    </div>
-    
-    <h2>🔍 Health Check Endpoints</h2>
-    <div class="endpoint">
-      <strong>Health Check:</strong> <a href="/health" target="_blank">/health</a>
-    </div>
-    <div class="endpoint">
-      <strong>Debug Info:</strong> <a href="/debug" target="_blank">/debug</a>
-    </div>
-    
-    <h2>🚀 API Endpoints</h2>
-    <div class="endpoint">
-      <strong>Services:</strong> <a href="/api/services" target="_blank">/api/services</a>
-    </div>
-    <div class="endpoint">
-      <strong>Authentication:</strong> /api/auth/register, /api/auth/login
-    </div>
-    <div class="endpoint">
-      <strong>Pet Management:</strong> /api/pets (requires auth)
-    </div>
-    <div class="endpoint">
-      <strong>Bookings:</strong> /api/bookings (requires auth)
-    </div>
-    
-    <h2>📚 Documentation</h2>
-    <p>This is the Pet Care Service Backend API. Use the endpoints above to interact with the service.</p>
-    <p><strong>Base API URL:</strong> <code>/api</code></p>
-    <p><strong>Authentication:</strong> JWT tokens required for most endpoints</p>
-    
-    <h2>🛠️ Development</h2>
-    <p>Environment: <strong>Production</strong></p>
-    <p>Deployment: <strong>Render.com</strong></p>
-    <p>Database: <strong>Google Cloud SQL (MySQL)</strong></p>
-  </div>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>React + Tailwind</title>
+  </head>
+  <body class="bg-gray-100 flex items-center justify-center h-screen">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
 </html>

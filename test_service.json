@@ -1,0 +1,9 @@
+{
+  "name": "Dog Walk Test",
+  "price": 25,
+  "description": "Professional dog walking service for your furry friend",
+  "duration": "60 minutes",
+  "typeid": 1,
+  "timeSlots": ["09:00", "14:00"],
+  "license": ""
+}

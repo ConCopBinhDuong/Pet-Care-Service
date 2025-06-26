@@ -4,7 +4,7 @@ import tokenBlacklistService from '../services/tokenBlacklistService.js'
 // JWT Secret (same as auth.js for consistency)
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this-in-production';
 
-function authMiddleware(req, res, next) {
+async function authMiddleware(req, res, next) {
     let token = req.headers['authorization'];
 
     if (!token) {
@@ -16,17 +16,18 @@ function authMiddleware(req, res, next) {
         token = token.substring(7);
     }
 
-    jwt.verify(token, JWT_SECRET, (err, decoded) => {
-        if (err) {
-            return res.status(401).json({ message: "Invalid token!" });
-        }
-
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        
         // Check if token is blacklisted (if JTI is present)
-        if (decoded.jti && tokenBlacklistService.isTokenBlacklisted(decoded.jti)) {
-            return res.status(401).json({ 
-                message: "Token has been revoked",
-                error: "TOKEN_REVOKED"
-            });
+        if (decoded.jti) {
+            const isBlacklisted = await tokenBlacklistService.isTokenBlacklisted(decoded.jti);
+            if (isBlacklisted) {
+                return res.status(401).json({ 
+                    message: "Token has been revoked",
+                    error: "TOKEN_REVOKED"
+                });
+            }
         }
 
         req.user = {
@@ -43,7 +44,9 @@ function authMiddleware(req, res, next) {
         };
         
         next();
-    });
+    } catch (err) {
+        return res.status(401).json({ message: "Invalid token!" });
+    }
 }
 
 export default authMiddleware

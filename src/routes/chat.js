@@ -284,7 +284,7 @@ router.get('/conversations', async (req, res) => {
                 FROM booking b
                 JOIN service s ON b.svid = s.serviceid
                 JOIN petowner po ON b.poid = po.id
-                JOIN users u_owner ON po.id = u_owner.userid
+                JOIN user u_owner ON po.id = u_owner.userid
                 LEFT JOIN service_update su ON b.bookid = su.bookid
                 WHERE s.providerid = ?
                 GROUP BY b.bookid, b.status, b.servedate, s.name, po.id, u_owner.name

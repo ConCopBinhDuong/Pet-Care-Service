@@ -1,7 +1,4 @@
 import express from 'express'
-import https from 'https'
-import http from 'http'
-import fs from 'fs'
 import path, {dirname} from 'path' 
 import {fileURLToPath} from 'url'
 
@@ -51,36 +48,13 @@ console.log(`🌍 Environment variables loaded:`, {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// SSL Configuration - Skip for Render (handles HTTPS at load balancer)
-let useHTTPS = false;
-let httpsOptions = null;
-
-// Force HTTP mode if running on Render
+// HTTP Configuration - HTTP only for development and Render deployment
 const isRender = process.env.RENDER_SERVICE_ID || process.env.RENDER;
 
-if (NODE_ENV === 'development' && !isRender) {
-    console.log('🔐 Loading self-signed SSL certificates (development only)');
-    
-    const sslDir = path.join(__dirname, '../ssl');
-    const sslKeyPath = path.join(sslDir, 'server.key');
-    const sslCertPath = path.join(sslDir, 'server.cert');
-    
-    try {
-        // Verify self-signed certificate files exist
-        if (fs.existsSync(sslKeyPath) && fs.existsSync(sslCertPath)) {
-            httpsOptions = {
-                key: fs.readFileSync(sslKeyPath),
-                cert: fs.readFileSync(sslCertPath)
-            };
-            useHTTPS = true;
-        } else {
-            console.log('📝 SSL certificates not found - running HTTP in development');
-        }
-    } catch (error) {
-        console.log('📝 SSL certificates not available - running HTTP in development');
-    }
+if (isRender) {
+    console.log('🌐 Render deployment: HTTP server (Render load balancer handles HTTPS)');
 } else {
-    console.log(`🌐 ${isRender ? 'Render' : 'Production'} mode: HTTP server (${isRender ? 'Render' : 'Load balancer'} handles HTTPS)`);
+    console.log('🌐 Local development: HTTP server');
 }
 
 // Security middleware (should be first)
@@ -100,8 +74,8 @@ app.use(express.static(path.join(__dirname, '../public')));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 
-// Force HTTPS redirect for production (Render handles HTTPS)
-if (NODE_ENV === 'production') {
+// Force HTTPS redirect only for Render production (Render handles SSL termination)
+if (isRender && NODE_ENV === 'production') {
     app.use((req, res, next) => {
         // Render sets x-forwarded-proto header
         if (req.get('x-forwarded-proto') !== 'https') {
@@ -180,61 +154,41 @@ app.get('/debug', (req, res) => {
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-// Start server (HTTPS in local development only, HTTP everywhere else)
-if (useHTTPS && httpsOptions && NODE_ENV === 'development' && !isRender) {
-    // Local development with HTTPS
-    https.createServer(httpsOptions, app).listen(PORT, async () => {
-        console.log(`HTTPS Server running on port: ${PORT} (local development)`);
-        console.log(`Secure API: https://localhost:${PORT}/api`);
-        console.log(`Health check: https://localhost:${PORT}/health`);
-        console.log(`Browser warning expected with self-signed certificates`);
-        
-        // Start notification scheduler
-        console.log('🔔 Starting notification scheduler...');
-        try {
-            notificationScheduler.start();
-        } catch (error) {
-            console.error('⚠️ Notification scheduler failed to start:', error.message);
-        }
-        
-        console.log('\n💡 Development Tips:');
-        console.log('   • Accept browser security warning for self-signed certs');
-        console.log('   • Use "Advanced" → "Proceed to localhost" in browsers');
-        console.log('   • Add certificate exception for testing');
-    });
-} else {
-    // Production HTTP (for Render) or local development HTTP
-    const server = app.listen(PORT, '0.0.0.0', async () => {
-        console.log(`✅ Server successfully started!`);
-        console.log(`🌐 Running on port: ${PORT} (HTTP)`);
-        console.log(`📍 Environment: ${NODE_ENV}`);
-        console.log(`🔗 Health check: /health`);
-        console.log(`🔗 Debug info: /debug`);
-        
-        if (isRender) {
-            console.log('🔒 HTTPS handled by Render load balancer');
-            console.log('🚀 Server bound to 0.0.0.0 for Render compatibility');
-        }
-        
-        // Test database connection
-        const dbConnected = await testConnection();
-        if (!dbConnected) {
-            console.error('❌ Database connection failed - server may not work properly');
-            // Don't exit in production, let the server try to handle requests
-        }
-        
-        // Start notification scheduler with error handling
-        console.log('🔔 Starting notification scheduler...');
-        try {
-            notificationScheduler.start();
-            console.log('✅ Notification scheduler started successfully');
-        } catch (error) {
-            console.error('⚠️ Notification scheduler failed to start:', error.message);
-            // Don't crash the server if scheduler fails
-        }
-        
-        console.log('🎉 Server ready to accept connections!');
-    });
+// Start HTTP server for both local development and Render
+const server = app.listen(PORT, '0.0.0.0', async () => {
+    console.log(`✅ Server successfully started!`);
+    console.log(`🌐 Running on port: ${PORT} (HTTP)`);
+    console.log(`📍 Environment: ${NODE_ENV}`);
+    
+    if (isRender) {
+        console.log('� HTTPS handled by Render load balancer');
+        console.log('� Server bound to 0.0.0.0 for Render compatibility');
+        console.log(`🔗 Public URL: https://your-app-name.onrender.com`);
+    } else {
+        console.log(`🔗 Local URL: http://localhost:${PORT}`);
+        console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+        console.log(`🔗 Debug info: http://localhost:${PORT}/debug`);
+    }
+    
+    // Test database connection
+    const dbConnected = await testConnection();
+    if (!dbConnected) {
+        console.error('❌ Database connection failed - server may not work properly');
+        // Don't exit in production, let the server try to handle requests
+    }
+    
+    // Start notification scheduler with error handling
+    console.log('🔔 Starting notification scheduler...');
+    try {
+        notificationScheduler.start();
+        console.log('✅ Notification scheduler started successfully');
+    } catch (error) {
+        console.error('⚠️ Notification scheduler failed to start:', error.message);
+        // Don't crash the server if scheduler fails
+    }
+    
+    console.log('🎉 Server ready to accept connections!');
+});
 
     // Handle server errors
     server.on('error', (error) => {
@@ -253,7 +207,6 @@ if (useHTTPS && httpsOptions && NODE_ENV === 'development' && !isRender) {
             process.exit(0);
         });
     });
-}
 
 // Global error handlers to prevent crashes
 process.on('uncaughtException', (error) => {

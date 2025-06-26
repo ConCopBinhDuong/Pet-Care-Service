@@ -12,7 +12,7 @@ router.use(authMiddleware);
  * Get user notifications with pagination and filtering
  * GET /api/notifications
  */
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
     try {
         const userId = req.user.userid;
         const { 
@@ -29,7 +29,7 @@ router.get('/', (req, res) => {
             unreadOnly: unreadOnly === 'true'
         };
 
-        const result = notificationService.getUserNotifications(userId, options);
+        const result = await notificationService.getUserNotifications(userId, options);
 
         if (!result.success) {
             return res.status(500).json({
@@ -55,10 +55,10 @@ router.get('/', (req, res) => {
  * Get notification statistics for the user
  * GET /api/notifications/stats
  */
-router.get('/stats', (req, res) => {
+router.get('/stats', async (req, res) => {
     try {
         const userId = req.user.userid;
-        const result = notificationService.getNotificationStats(userId);
+        const result = await notificationService.getNotificationStats(userId);
 
         if (!result.success) {
             return res.status(500).json({
@@ -84,7 +84,7 @@ router.get('/stats', (req, res) => {
  * Mark a notification as read
  * PUT /api/notifications/:id/read
  */
-router.put('/:id/read', (req, res) => {
+router.put('/:id/read', async (req, res) => {
     try {
         const userId = req.user.userid;
         const notificationId = parseInt(req.params.id);
@@ -95,7 +95,7 @@ router.put('/:id/read', (req, res) => {
             });
         }
 
-        const result = notificationService.markAsRead(notificationId, userId);
+        const result = await notificationService.markAsRead(notificationId, userId);
 
         if (!result.success) {
             return res.status(500).json({
@@ -126,10 +126,10 @@ router.put('/:id/read', (req, res) => {
  * Mark all notifications as read
  * PUT /api/notifications/read-all
  */
-router.put('/read-all', (req, res) => {
+router.put('/read-all', async (req, res) => {
     try {
         const userId = req.user.userid;
-        const result = notificationService.markAllAsRead(userId);
+        const result = await notificationService.markAllAsRead(userId);
 
         if (!result.success) {
             return res.status(500).json({
@@ -155,7 +155,7 @@ router.put('/read-all', (req, res) => {
  * Delete a notification
  * DELETE /api/notifications/:id
  */
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
     try {
         const userId = req.user.userid;
         const notificationId = parseInt(req.params.id);
@@ -166,7 +166,7 @@ router.delete('/:id', (req, res) => {
             });
         }
 
-        const result = notificationService.deleteNotification(notificationId, userId);
+        const result = await notificationService.deleteNotification(notificationId, userId);
 
         if (!result.success) {
             return res.status(500).json({
@@ -197,7 +197,7 @@ router.delete('/:id', (req, res) => {
  * Manually trigger schedule checks (for testing)
  * POST /api/notifications/check-schedules
  */
-router.post('/check-schedules', (req, res) => {
+router.post('/check-schedules', async (req, res) => {
     try {
         const userRole = req.user.role;
 
@@ -208,8 +208,8 @@ router.post('/check-schedules', (req, res) => {
             });
         }
 
-        const scheduleResult = notificationService.checkPetSchedules();
-        const bookingResult = notificationService.checkBookingStatus();
+        const scheduleResult = await notificationService.checkPetSchedules();
+        const bookingResult = await notificationService.checkBookingStatus();
 
         res.status(200).json({
             message: 'Manual notification check completed',
@@ -300,7 +300,7 @@ router.get('/admin/stats', async (req, res) => {
  * Clean up old notifications (Admin only)
  * POST /api/notifications/admin/cleanup
  */
-router.post('/admin/cleanup', (req, res) => {
+router.post('/admin/cleanup', async (req, res) => {
     try {
         const userRole = req.user.role;
 
@@ -310,7 +310,7 @@ router.post('/admin/cleanup', (req, res) => {
             });
         }
 
-        const result = notificationService.cleanupOldNotifications();
+        const result = await notificationService.cleanupOldNotifications();
 
         if (!result.success) {
             return res.status(500).json({

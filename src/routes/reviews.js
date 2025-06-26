@@ -28,7 +28,7 @@ router.get('/my-reviews', async (req, res) => {
             JOIN booking b ON sr.bookid = b.bookid
             JOIN service s ON b.svid = s.serviceid
             JOIN serviceprovider sp ON s.providerid = sp.id
-            JOIN users u ON sp.id = u.userid
+            JOIN user u ON sp.id = u.userid
             WHERE b.poid = ?
             ORDER BY b.servedate DESC
         `, [userId]);
@@ -83,7 +83,7 @@ router.get('/service/:serviceId', async (req, res) => {
             FROM service_review sr
             JOIN booking b ON sr.bookid = b.bookid
             JOIN petowner po ON b.poid = po.id
-            JOIN users u ON po.id = u.userid
+            JOIN user u ON po.id = u.userid
             WHERE b.svid = ?
             ORDER BY b.servedate DESC
         `, [serviceId]);
@@ -128,7 +128,7 @@ router.get('/provider/:providerId', async (req, res) => {
         const provider = await db.get(`
             SELECT sp.id, sp.business_name, u.name
             FROM serviceprovider sp
-            JOIN users u ON sp.id = u.userid
+            JOIN user u ON sp.id = u.userid
             WHERE sp.id = ?
         `, [providerId]);
 
@@ -154,7 +154,7 @@ router.get('/provider/:providerId', async (req, res) => {
             JOIN booking b ON sr.bookid = b.bookid
             JOIN service s ON b.svid = s.serviceid
             JOIN petowner po ON b.poid = po.id
-            JOIN users u ON po.id = u.userid
+            JOIN user u ON po.id = u.userid
             WHERE s.providerid = ?
             ORDER BY b.servedate DESC
         `, [providerId]);
@@ -186,6 +186,7 @@ router.get('/provider/:providerId', async (req, res) => {
         }));
 
         res.status(200).json({
+            success: true,
             message: 'Provider reviews retrieved successfully',
             provider: {
                 id: provider.id,
@@ -462,8 +463,8 @@ router.get('/booking/:bookingId', async (req, res) => {
             JOIN booking b ON sr.bookid = b.bookid
             JOIN service s ON b.svid = s.serviceid
             JOIN serviceprovider sp ON s.providerid = sp.id
-            JOIN users u_reviewer ON b.poid = u_reviewer.userid
-            JOIN users u_provider ON sp.id = u_provider.userid
+            JOIN user u_reviewer ON b.poid = u_reviewer.userid
+            JOIN user u_provider ON sp.id = u_provider.userid
             WHERE sr.bookid = ?
         `, [bookingId]);
 

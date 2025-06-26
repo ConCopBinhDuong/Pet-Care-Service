@@ -291,6 +291,14 @@ class NotificationService {
      */
     async getUserNotifications(userId, options = {}) {
         try {
+            // Validate userId
+            if (!userId || isNaN(parseInt(userId))) {
+                return {
+                    success: false,
+                    error: 'Invalid user ID provided'
+                };
+            }
+            
             const { 
                 page = 1, 
                 limit = 20, 
@@ -317,7 +325,14 @@ class NotificationService {
             }
             
             query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
-            params.push(limit, offset);
+            
+            // Ensure we pass the correct number and type of parameters
+            const finalLimit = parseInt(limit);
+            const finalOffset = parseInt(offset);
+            params.push(finalLimit, finalOffset);
+            
+            console.log('Notification query:', query);
+            console.log('Notification params:', params);
             
             const notifications = await this.db.all(query, params);
             

@@ -5,6 +5,49 @@
 import db from '../db.js';
 
 /**
+ * Convert duration text to TIME format (HH:MM:SS)
+ * Examples: "60 minutes" -> "01:00:00", "2 hours" -> "02:00:00", "30 min" -> "00:30:00"
+ */
+export const convertDurationToTime = (durationText) => {
+    if (!durationText || typeof durationText !== 'string') {
+        return null;
+    }
+    
+    const text = durationText.toLowerCase().trim();
+    
+    // Try to extract numbers and time units
+    const minutesMatch = text.match(/(\d+)\s*(minutes?|mins?|m)/i);
+    const hoursMatch = text.match(/(\d+)\s*(hours?|hrs?|h)/i);
+    
+    let totalMinutes = 0;
+    
+    if (hoursMatch) {
+        totalMinutes += parseInt(hoursMatch[1]) * 60;
+    }
+    
+    if (minutesMatch) {
+        totalMinutes += parseInt(minutesMatch[1]);
+    }
+    
+    // If no pattern matched, try to parse as just a number (assume minutes)
+    if (totalMinutes === 0) {
+        const numberMatch = text.match(/^(\d+)$/);
+        if (numberMatch) {
+            totalMinutes = parseInt(numberMatch[1]);
+        }
+    }
+    
+    // Convert to HH:MM:SS format
+    if (totalMinutes > 0) {
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:00`;
+    }
+    
+    return null;
+};
+
+/**
  * Validate Vietnamese phone numbers
  * Supports formats: +84xxxxxxxxx, 84xxxxxxxxx, 0xxxxxxxxx
  */
@@ -1164,6 +1207,15 @@ export const validateServiceSubmission = (req, res, next) => {
         errors.push('Service duration is required and cannot be empty');
     } else if (duration.trim().length > 50) {
         errors.push('Service duration cannot exceed 50 characters');
+    } else {
+        // Try to convert duration to TIME format for database compatibility
+        const timeFormat = convertDurationToTime(duration);
+        if (!timeFormat) {
+            errors.push('Service duration must be in a valid format (e.g., "60 minutes", "2 hours", "30 min")');
+        } else {
+            // Add the converted time format to the request body for the database
+            req.body.durationTime = timeFormat;
+        }
     }
 
     // Validate service type - either typeid (existing) or serviceType (new)
@@ -1188,22 +1240,28 @@ export const validateServiceSubmission = (req, res, next) => {
         }
     }
 
-    // Validate license (optional but recommended)
-    if (req.body.license) {
+    // Validate license (required for new services and must be PDF)
+    if (!req.body.license || req.body.license.trim().length === 0) {
+        errors.push('License is required');
+    } else {
         const { license } = req.body;
         if (typeof license !== 'string') {
             errors.push('License must be a string (base64 encoded file)');
         } else {
-            // Check if it's a valid base64 format for PDF or image
-            const isValidBase64 = /^data:(application\/pdf|image\/(jpeg|jpg|png));base64,/.test(license);
-            if (!isValidBase64) {
-                errors.push('License must be a valid base64 encoded PDF or image file');
+            // Check if it's a valid base64 format for PDF only
+            const isValidPDF = /^data:application\/pdf;base64,/.test(license);
+            if (!isValidPDF) {
+                errors.push('License must be a valid base64 encoded PDF file');
             } else {
                 // Check file size (10MB limit for license documents)
                 const base64Data = license.split(',')[1];
-                const fileSize = (base64Data.length * 3) / 4; // Approximate size in bytes
-                if (fileSize > 10 * 1024 * 1024) { // 10MB limit
-                    errors.push('License file size cannot exceed 10MB');
+                if (!base64Data) {
+                    errors.push('Invalid license file format');
+                } else {
+                    const fileSize = (base64Data.length * 3) / 4; // Approximate size in bytes
+                    if (fileSize > 10 * 1024 * 1024) { // 10MB limit
+                        errors.push('License file size cannot exceed 10MB');
+                    }
                 }
             }
         }

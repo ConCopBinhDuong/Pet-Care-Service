@@ -7,7 +7,10 @@
     "dev": "NODE_ENV=development node --watch --experimental-strip-types ./src/server.js",
     "start": "NODE_ENV=production node ./src/server.js",
     "build": "echo 'No build step required for Node.js backend'",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev:frontend": "cd public && npm run dev",
+    "dev:both": "concurrently \"npm run dev\" \"npm run dev:frontend\"",
+    "install:all": "npm install && cd public && npm install"
   },
   "keywords": [],
   "author": "",
@@ -27,5 +30,16 @@
     "multer": "^2.0.1",
     "mysql2": "^3.6.5",
     "nodemailer": "^7.0.3"
-  }
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ConCopBinhDuong/Pet-Care-Service.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ConCopBinhDuong/Pet-Care-Service/issues"
+  },
+  "homepage": "https://github.com/ConCopBinhDuong/Pet-Care-Service#readme"
 }

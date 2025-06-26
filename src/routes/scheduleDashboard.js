@@ -49,7 +49,7 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
             JOIN service s ON b.svid = s.serviceid
             JOIN servicetype st ON s.typeid = st.typeid
             JOIN serviceprovider sp ON s.providerid = sp.id
-            JOIN users u ON sp.id = u.userid
+            JOIN user u ON sp.id = u.userid
             WHERE b.poid = ?
         `;
 
@@ -120,6 +120,7 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
         };
 
         res.status(200).json({
+            success: true,
             message: 'Schedule dashboard retrieved successfully',
             dashboard: {
                 appointments: appointmentsWithPets,
@@ -382,7 +383,7 @@ router.get('/provider-dashboard', authMiddleware, async (req, res) => {
             JOIN service s ON b.svid = s.serviceid
             JOIN servicetype st ON s.typeid = st.typeid
             JOIN petowner po ON b.poid = po.id
-            JOIN users u ON po.id = u.userid
+            JOIN user u ON po.id = u.userid
             WHERE s.providerid = ?
         `;
 
@@ -440,9 +441,18 @@ router.get('/provider-dashboard', authMiddleware, async (req, res) => {
         ).length;
         const completedAppointments = workAppointments.filter(a => a.status === 'completed').length;
         const cancelledAppointments = workAppointments.filter(a => a.status === 'cancelled').length;
+        const pendingRequests = workAppointments.filter(a => a.status === 'pending').length;
         const totalRevenue = workAppointments
             .filter(a => a.status === 'completed')
             .reduce((sum, a) => sum + a.price, 0);
+
+        // Get active services count for this provider
+        const activeServicesResult = await db.get(`
+            SELECT COUNT(*) as count 
+            FROM service 
+            WHERE providerid = ? AND status = 'approved'
+        `, [userId]);
+        const activeServices = activeServicesResult.count;
 
         // Service breakdown statistics
         const serviceBreakdown = {};
@@ -465,11 +475,14 @@ router.get('/provider-dashboard', authMiddleware, async (req, res) => {
             upcomingAppointments,
             completedAppointments,
             cancelledAppointments,
+            pendingRequests,
+            activeServices,
             totalRevenue,
             serviceBreakdown
         };
 
         res.status(200).json({
+            success: true,
             message: 'Work schedule dashboard retrieved successfully',
             dashboard: {
                 workAppointments: appointmentsWithPets,
@@ -534,7 +547,7 @@ router.get('/monthly', authMiddleware, async (req, res) => {
             JOIN service s ON b.svid = s.serviceid
             JOIN servicetype st ON s.typeid = st.typeid
             JOIN petowner po ON b.poid = po.id
-            JOIN users u ON po.id = u.userid
+            JOIN user u ON po.id = u.userid
             WHERE s.providerid = ? AND b.servedate BETWEEN ? AND ?
             ORDER BY b.servedate ASC, b.slot ASC
         `, [
@@ -636,7 +649,7 @@ router.get('/provider-today', authMiddleware, async (req, res) => {
             JOIN service s ON b.svid = s.serviceid
             JOIN servicetype st ON s.typeid = st.typeid
             JOIN petowner po ON b.poid = po.id
-            JOIN users u ON po.id = u.userid
+            JOIN user u ON po.id = u.userid
             WHERE s.providerid = ? AND b.servedate = ?
             ORDER BY b.slot ASC
         `, [userId, today]);

@@ -129,28 +129,28 @@ router.post('/pet/:petId', validateActivityCreation, async (req, res) => {
             });
         }
 
-        // Start transaction
-        await db.beginTransaction();
-
+        // Use the transaction wrapper for proper transaction handling
         try {
-            // Insert new activity
-            const result = await db.execute(`
-                INSERT INTO activity (name, description, petid)
-                VALUES (?, ?, ?)
-            `, [
-                name, 
-                description || null, 
-                petId
-            ]);
+            const newActivity = await db.transaction(async (connection) => {
+                // Insert new activity
+                const [result] = await connection.execute(`
+                    INSERT INTO activity (name, description, petid)
+                    VALUES (?, ?, ?)
+                `, [
+                    name, 
+                    description || null, 
+                    petId
+                ]);
 
-            await db.commit();
-
-            // Get the newly created activity
-            const newActivity = await db.get(`
-                SELECT activityid, name, description, petid
-                FROM activity 
-                WHERE activityid = ?
-            `, [result.insertId]);
+                // Get the newly created activity
+                const [activityRows] = await connection.execute(`
+                    SELECT activityid, name, description, petid
+                    FROM activity 
+                    WHERE activityid = ?
+                `, [result.insertId]);
+                
+                return activityRows[0];
+            });
 
             res.status(201).json({
                 message: 'Activity added successfully',
@@ -158,7 +158,6 @@ router.post('/pet/:petId', validateActivityCreation, async (req, res) => {
             });
 
         } catch (transactionErr) {
-            await db.rollback();
             throw transactionErr;
         }
 
@@ -262,39 +261,38 @@ router.put('/:activityId', validateActivityUpdate, async (req, res) => {
             });
         }
 
-        // Start transaction
-        await db.beginTransaction();
-
+        // Use the transaction wrapper for proper transaction handling
         try {
-            // Build update query
-            const allowedFields = ['name', 'description'];
-            const activityUpdates = {};
-            
-            allowedFields.forEach(field => {
-                if (updates[field] !== undefined) {
-                    activityUpdates[field] = updates[field];
+            const updatedActivity = await db.transaction(async (connection) => {
+                // Build update query
+                const allowedFields = ['name', 'description'];
+                const activityUpdates = {};
+                
+                allowedFields.forEach(field => {
+                    if (updates[field] !== undefined) {
+                        activityUpdates[field] = updates[field];
+                    }
+                });
+
+                if (Object.keys(activityUpdates).length === 0) {
+                    throw new Error('No valid fields to update');
                 }
+
+                const setClause = Object.keys(activityUpdates).map(key => `${key} = ?`).join(', ');
+                const values = Object.values(activityUpdates);
+                
+                await connection.execute(`UPDATE activity SET ${setClause} WHERE activityid = ?`, [...values, activityId]);
+
+                // Get updated activity
+                const [activityRows] = await connection.execute(`
+                    SELECT a.activityid, a.name, a.description, a.petid, p.name as pet_name
+                    FROM activity a
+                    JOIN pet p ON a.petid = p.petid
+                    WHERE a.activityid = ?
+                `, [activityId]);
+
+                return activityRows[0];
             });
-
-            if (Object.keys(activityUpdates).length === 0) {
-                await db.rollback();
-                return res.status(400).json({ message: 'No valid fields to update' });
-            }
-
-            const setClause = Object.keys(activityUpdates).map(key => `${key} = ?`).join(', ');
-            const values = Object.values(activityUpdates);
-            
-            await db.execute(`UPDATE activity SET ${setClause} WHERE activityid = ?`, [...values, activityId]);
-
-            await db.commit();
-
-            // Get updated activity
-            const updatedActivity = await db.get(`
-                SELECT a.activityid, a.name, a.description, a.petid, p.name as pet_name
-                FROM activity a
-                JOIN pet p ON a.petid = p.petid
-                WHERE a.activityid = ?
-            `, [activityId]);
 
             res.status(200).json({
                 message: 'Activity updated successfully',
@@ -302,7 +300,9 @@ router.put('/:activityId', validateActivityUpdate, async (req, res) => {
             });
 
         } catch (transactionErr) {
-            await db.rollback();
+            if (transactionErr.message === 'No valid fields to update') {
+                return res.status(400).json({ message: transactionErr.message });
+            }
             throw transactionErr;
         }
 
@@ -337,53 +337,55 @@ router.delete('/:activityId', authMiddleware, async (req, res) => {
             return res.status(400).json({ message: 'Invalid activity ID' });
         }
 
-        // Start transaction
-        await db.beginTransaction();
-
+        // Use the transaction wrapper for proper transaction handling
         try {
-            // Get activity info before deletion and verify ownership
-            const activity = await db.get(`
-                SELECT a.activityid, a.name, a.description, p.userid, p.name as pet_name
-                FROM activity a
-                JOIN pet p ON a.petid = p.petid
-                WHERE a.activityid = ?
-            `, [activityId]);
+            const deletedActivity = await db.transaction(async (connection) => {
+                // Get activity info before deletion and verify ownership
+                const [activityRows] = await connection.execute(`
+                    SELECT a.activityid, a.name, a.description, p.userid, p.name as pet_name
+                    FROM activity a
+                    JOIN pet p ON a.petid = p.petid
+                    WHERE a.activityid = ?
+                `, [activityId]);
+                
+                const activity = activityRows[0];
 
-            if (!activity) {
-                await db.rollback();
-                return res.status(404).json({ message: 'Activity not found' });
-            }
+                if (!activity) {
+                    throw new Error('Activity not found');
+                }
 
-            if (activity.userid !== userId) {
-                await db.rollback();
-                return res.status(403).json({ 
-                    message: 'Access denied. You can only delete activities for your own pets.' 
-                });
-            }
+                if (activity.userid !== userId) {
+                    throw new Error('Access denied. You can only delete activities for your own pets.');
+                }
 
-            // Delete activity (CASCADE DELETE will handle related records)
-            const result = await db.execute(`DELETE FROM activity WHERE activityid = ?`, [activityId]);
+                // Delete activity (CASCADE DELETE will handle related records)
+                const [result] = await connection.execute(`DELETE FROM activity WHERE activityid = ?`, [activityId]);
 
-            if (result.affectedRows === 0) {
-                await db.rollback();
-                return res.status(404).json({ message: 'Activity not found or already deleted' });
-            }
+                if (result.affectedRows === 0) {
+                    throw new Error('Activity not found or already deleted');
+                }
 
-            await db.commit();
+                return activity;
+            });
 
-            console.log(`Activity deleted: ${activity.name} for pet ${activity.pet_name} by user ${userId}`);
+            console.log(`Activity deleted: ${deletedActivity.name} for pet ${deletedActivity.pet_name} by user ${userId}`);
 
             res.status(200).json({
                 message: 'Activity deleted successfully',
                 deletedActivity: {
-                    id: activity.activityid,
-                    name: activity.name,
-                    pet_name: activity.pet_name
+                    id: deletedActivity.activityid,
+                    name: deletedActivity.name,
+                    pet_name: deletedActivity.pet_name
                 }
             });
 
         } catch (transactionErr) {
-            await db.rollback();
+            if (transactionErr.message === 'Activity not found' || transactionErr.message === 'Activity not found or already deleted') {
+                return res.status(404).json({ message: transactionErr.message });
+            }
+            if (transactionErr.message.includes('Access denied')) {
+                return res.status(403).json({ message: transactionErr.message });
+            }
             throw transactionErr;
         }
 

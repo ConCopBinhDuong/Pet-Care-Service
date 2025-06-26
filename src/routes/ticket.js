@@ -63,7 +63,7 @@ router.get('/archived', async (req, res) => {
 
         // Fetch finished tickets where the user is the owner
         const archivedTickets = await db.all(`
-            SELECT ticketid, subject, description, status, response, attachment, createtime, assigntime, managerid
+            SELECT ticketid, subject, description, status, respone, attachment, createtime, assigntime, managerid
             FROM ticket
             WHERE userid = ? AND status = 'finished'
             ORDER BY assigntime DESC
@@ -234,7 +234,7 @@ router.post('/:ticketId/reply', validateTicketReply, async (req, res) => {
         // Initial manager reply: update ticket, set status to solving
         await db.execute(`
             UPDATE ticket 
-            SET response = ?, status = 'solving', managerid = ?, assigntime = CURRENT_TIMESTAMP
+            SET respone = ?, status = 'solving', managerid = ?, assigntime = CURRENT_TIMESTAMP
             WHERE ticketid = ?
         `, [response, userId, ticketId]);
 

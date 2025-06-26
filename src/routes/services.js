@@ -27,8 +27,9 @@ router.post('/initialize', authMiddleware, async (req, res) => {
         }
 
         // Start transaction
+        let connection;
         try {
-            await db.beginTransaction();
+            connection = await db.beginTransaction();
             
             // Execute inserts within transaction
             for (const serviceType of serviceTypes) {
@@ -38,7 +39,7 @@ router.post('/initialize', authMiddleware, async (req, res) => {
                 `, [serviceType.type]);
             }
             
-            await db.commit();
+            await db.commit(connection);
 
             res.status(200).json({
                 message: 'Service types initialized',
@@ -46,7 +47,9 @@ router.post('/initialize', authMiddleware, async (req, res) => {
             });
 
         } catch (error) {
-            await db.rollback();
+            if (connection) {
+                await db.rollback(connection);
+            }
             throw error;
         }
 
@@ -100,7 +103,8 @@ router.post('/', authMiddleware, validateServiceSubmission, async (req, res) => 
             typeid,
             serviceType, 
             license,
-            timeSlots 
+            timeSlots,
+            durationTime 
         } = req.body;
 
         let finalTypeId = typeid;
@@ -140,14 +144,15 @@ router.post('/', authMiddleware, validateServiceSubmission, async (req, res) => 
         }
 
         // Start transaction
+        let connection;
         try {
-            await db.beginTransaction();
+            connection = await db.beginTransaction();
 
             // Insert service
             const result = await db.execute(`
                 INSERT INTO service (name, price, description, duration, license, typeid, providerid)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            `, [name, price, description || null, duration, license || null, finalTypeId, userId]);
+            `, [name, price, description || null, durationTime || duration, license || null, finalTypeId, userId]);
 
             const serviceId = result.insertId;
 
@@ -185,7 +190,7 @@ router.post('/', authMiddleware, validateServiceSubmission, async (req, res) => 
                 ORDER BY slot ASC
             `, [serviceId]);
 
-            await db.commit();
+            await db.commit(connection);
 
             res.status(201).json({
                 message: 'Service created successfully',
@@ -196,7 +201,9 @@ router.post('/', authMiddleware, validateServiceSubmission, async (req, res) => 
             });
 
         } catch (err) {
-            await db.rollback();
+            if (connection) {
+                await db.rollback(connection);
+            }
             throw err;
         }
 
@@ -454,7 +461,7 @@ router.post('/submit', authMiddleware, validateServiceSubmission, async (req, re
             });
         }
 
-        const { name, price, description, duration, typeid, serviceType, license, timeSlots } = req.body;
+        const { name, price, description, duration, typeid, serviceType, license, timeSlots, durationTime } = req.body;
         const providerId = req.user.userid;
 
         // Verify service provider exists
@@ -509,11 +516,11 @@ router.post('/submit', authMiddleware, validateServiceSubmission, async (req, re
             }
         }
 
-        // Insert the service with pending status
+        // Insert the service with pending status - use durationTime for database, duration for display
         const serviceResult = await db.execute(`
             INSERT INTO service (name, price, description, duration, license, typeid, providerid, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
-        `, [name.trim(), price, description.trim(), duration.trim(), license || null, finalTypeId, providerId]);
+        `, [name.trim(), price, description.trim(), durationTime || duration.trim(), license || null, finalTypeId, providerId]);
 
         // Add time slots if provided
         if (timeSlots && timeSlots.length > 0) {
@@ -597,7 +604,7 @@ router.get('/my-services', authMiddleware, async (req, res) => {
             FROM service s
             JOIN servicetype st ON s.typeid = st.typeid
             LEFT JOIN manager m ON s.reviewed_by = m.id
-            LEFT JOIN users u ON m.id = u.userid
+            LEFT JOIN user u ON m.id = u.userid
             WHERE s.providerid = ?
         `;
 
@@ -678,7 +685,7 @@ router.get('/pending-review', authMiddleware, async (req, res) => {
             FROM service s
             JOIN servicetype st ON s.typeid = st.typeid
             JOIN serviceprovider sp ON s.providerid = sp.id
-            JOIN users u ON sp.id = u.userid
+            JOIN user u ON sp.id = u.userid
             WHERE s.status = 'pending'
             ORDER BY s.submission_date ASC
         `);
@@ -746,7 +753,7 @@ router.get('/review-summary', authMiddleware, async (req, res) => {
             FROM service s
             JOIN serviceprovider sp ON s.providerid = sp.id
             LEFT JOIN manager m ON s.reviewed_by = m.id
-            LEFT JOIN users u ON m.id = u.userid
+            LEFT JOIN user u ON m.id = u.userid
             WHERE s.status IN ('approved', 'rejected')
             ORDER BY s.review_date DESC
             LIMIT 10
@@ -848,7 +855,7 @@ router.put('/:id/update', authMiddleware, validateServiceSubmission, async (req,
 
         const serviceId = parseInt(req.params.id);
         const providerId = req.user.userid;
-        const { name, price, description, duration, typeid, timeSlots } = req.body;
+        const { name, price, description, duration, typeid, timeSlots, durationTime } = req.body;
 
         if (isNaN(serviceId)) {
             return res.status(400).json({
@@ -887,7 +894,7 @@ router.put('/:id/update', authMiddleware, validateServiceSubmission, async (req,
         }
 
         // Start transaction
-        await db.beginTransaction();
+        const connection = await db.beginTransaction();
 
         try {
             // Update the service
@@ -900,7 +907,7 @@ router.put('/:id/update', authMiddleware, validateServiceSubmission, async (req,
                 name.trim(),
                 price,
                 description.trim(),
-                duration.trim(),
+                durationTime || duration.trim(),
                 typeid,
                 serviceId,
                 providerId
@@ -921,7 +928,7 @@ router.put('/:id/update', authMiddleware, validateServiceSubmission, async (req,
                 }
             }
 
-            await db.commit();
+            await db.commit(connection);
 
             // Get updated service details
             const updatedService = await db.get(`
@@ -940,7 +947,7 @@ router.put('/:id/update', authMiddleware, validateServiceSubmission, async (req,
             `, [serviceId]);
 
         } catch (transactionErr) {
-            await db.rollback();
+            await db.rollback(connection);
             throw transactionErr;
         }
 
@@ -1004,7 +1011,7 @@ router.put('/:id/update-approved', authMiddleware, validateApprovedServiceUpdate
         }
 
         // Start transaction
-        await db.beginTransaction();
+        const connection = await db.beginTransaction();
 
         try {
             // Update description if provided
@@ -1036,7 +1043,7 @@ router.put('/:id/update-approved', authMiddleware, validateApprovedServiceUpdate
                                    po.id as petowner_id, u.name as petowner_name, u.email as petowner_email
                             FROM booking b
                             JOIN petowner po ON b.poid = po.id
-                            JOIN users u ON po.id = u.userid
+                            JOIN user u ON po.id = u.userid
                             WHERE b.svid = ? AND b.slot = ? AND b.status NOT IN ('cancelled', 'completed')
                         `, [serviceId, slot]);
                         
@@ -1050,7 +1057,7 @@ router.put('/:id/update-approved', authMiddleware, validateApprovedServiceUpdate
                     
                     if (conflictingBookings.length > 0) {
                         // Return detailed conflict information
-                        await db.rollback();
+                        await db.rollback(connection);
                         return res.status(409).json({
                             success: false,
                             error: 'Timeslot conflict detected',
@@ -1100,7 +1107,7 @@ router.put('/:id/update-approved', authMiddleware, validateApprovedServiceUpdate
                 }
             }
 
-            await db.commit();
+            await db.commit(connection);
 
             // Get updated service details
             const updatedService = await db.get(`
@@ -1113,9 +1120,15 @@ router.put('/:id/update-approved', authMiddleware, validateApprovedServiceUpdate
                     s.status,
                     s.submission_date,
                     s.review_date,
-                    st.type as service_type
+                    s.rejection_reason,
+                    st.type as service_type,
+                    sp.business_name as provider_name,
+                    u.name as reviewer_name
                 FROM service s
                 JOIN servicetype st ON s.typeid = st.typeid
+                JOIN serviceprovider sp ON s.providerid = sp.id
+                LEFT JOIN manager m ON s.reviewed_by = m.id
+                LEFT JOIN user u ON m.id = u.userid
                 WHERE s.serviceid = ?
             `, [serviceId]);
 
@@ -1137,7 +1150,7 @@ router.put('/:id/update-approved', authMiddleware, validateApprovedServiceUpdate
             });
 
         } catch (updateError) {
-            await db.rollback();
+            await db.rollback(connection);
             throw updateError;
         }
 
@@ -1185,7 +1198,7 @@ router.post('/:id/review', authMiddleware, validateServiceApproval, async (req, 
                 s.providerid as providerid
             FROM service s
             JOIN serviceprovider sp ON s.providerid = sp.id
-            JOIN users u ON sp.id = u.userid
+            JOIN user u ON sp.id = u.userid
             WHERE s.serviceid = ?
         `, [serviceId]);
 
@@ -1266,7 +1279,7 @@ router.post('/:id/review', authMiddleware, validateServiceApproval, async (req, 
             JOIN servicetype st ON s.typeid = st.typeid
             JOIN serviceprovider sp ON s.providerid = sp.id
             LEFT JOIN manager m ON s.reviewed_by = m.id
-            LEFT JOIN users u ON m.id = u.userid
+            LEFT JOIN user u ON m.id = u.userid
             WHERE s.serviceid = ?
         `, [serviceId]);
 
@@ -1330,9 +1343,9 @@ router.get('/:serviceid/manager-details', authMiddleware, async (req, res) => {
             FROM service s
             JOIN servicetype st ON s.typeid = st.typeid
             JOIN serviceprovider sp ON s.providerid = sp.id
-            JOIN users u ON sp.id = u.userid
+            JOIN user u ON sp.id = u.userid
             LEFT JOIN manager m ON s.reviewed_by = m.id
-            LEFT JOIN users mu ON m.id = mu.userid
+            LEFT JOIN user mu ON m.id = mu.userid
             WHERE s.serviceid = ?
         `, [serviceid]);
 
@@ -1358,6 +1371,93 @@ router.get('/:serviceid/manager-details', authMiddleware, async (req, res) => {
         console.error('Error retrieving complete service details:', error);
         res.status(500).json({
             message: 'Internal server error while retrieving service details'
+        });
+    }
+});
+
+/**
+ * Delete a service (only if no bookings exist)
+ * DELETE /api/services/:id
+ * Role: Service Provider (own services only)
+ */
+router.delete('/:id', authMiddleware, async (req, res) => {
+    try {
+        const serviceId = parseInt(req.params.id);
+        const userId = req.user.userid;
+
+        if (isNaN(serviceId)) {
+            return res.status(400).json({
+                message: 'Invalid service ID'
+            });
+        }
+
+        // Check if service exists and belongs to the user
+        const service = await db.get(`
+            SELECT s.serviceid, s.name, s.providerid, s.status
+            FROM service s
+            WHERE s.serviceid = ?
+        `, [serviceId]);
+
+        if (!service) {
+            return res.status(404).json({
+                message: 'Service not found'
+            });
+        }
+
+        // Check if user is the service provider
+        if (service.providerid !== userId) {
+            return res.status(403).json({
+                message: 'Access denied. You can only delete your own services.'
+            });
+        }
+
+        // Check if there are any bookings for this service
+        const existingBookings = await db.get(`
+            SELECT COUNT(*) as booking_count
+            FROM booking b
+            JOIN timeslot t ON b.svid = t.serviceid AND b.slot = t.slot
+            WHERE t.serviceid = ?
+        `, [serviceId]);
+
+        if (existingBookings.booking_count > 0) {
+            return res.status(400).json({
+                message: 'Cannot delete service with existing bookings. Please wait for all bookings to be completed or contact support.'
+            });
+        }
+
+        // Start transaction
+        const connection = await db.beginTransaction();
+
+        try {
+            // Delete timeslots first (due to foreign key constraints)
+            await db.execute(`
+                DELETE FROM timeslot WHERE serviceid = ?
+            `, [serviceId]);
+
+            // Delete the service
+            await db.execute(`
+                DELETE FROM service WHERE serviceid = ?
+            `, [serviceId]);
+
+            await db.commit(connection);
+
+            res.status(200).json({
+                message: 'Service deleted successfully',
+                deletedService: {
+                    serviceid: service.serviceid,
+                    name: service.name
+                }
+            });
+
+        } catch (error) {
+            await db.rollback(connection);
+            throw error;
+        }
+
+    } catch (error) {
+        console.error('Error deleting service:', error);
+        res.status(500).json({
+            message: 'Internal server error while deleting service'
         });
     }
 });
