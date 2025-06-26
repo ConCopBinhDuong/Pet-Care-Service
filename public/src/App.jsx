@@ -172,7 +172,7 @@ const MessageSquare = (props) => (
 
 // Use environment-aware API URL
 const API_BASE_URL = import.meta.env.PROD 
-    ? 'https://pet-care-service-1.onrender.com'  // Replace with your actual backend URL
+    ? 'https://pet-care-service-1.onrender.com/api'  // Your actual backend URL + /api
     : '/api'; // Use Vite proxy in development
 
 // Helper function to handle fetch requests and responses
