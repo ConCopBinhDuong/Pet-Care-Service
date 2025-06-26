@@ -170,7 +170,10 @@ const MessageSquare = (props) => (
 // LIVE API SERVICE
 // =================================================================================
 
-const API_BASE_URL = '/api'; // Use Vite proxy in development
+// Use environment-aware API URL
+const API_BASE_URL = import.meta.env.PROD 
+    ? 'https://pet-care-backend.onrender.com/api'  // Replace with your actual backend URL
+    : '/api'; // Use Vite proxy in development
 
 // Helper function to handle fetch requests and responses
 const fetchApi = async (url, options = {}) => {
