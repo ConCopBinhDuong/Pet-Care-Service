@@ -661,7 +661,7 @@ const Button = ({ children, onClick, variant = 'primary', className = '', disabl
     );
 };
 
-const Input = ({ label, type = 'text', value, onChange, placeholder, name, disabled = false, min }) => (
+const Input = ({ label, type = 'text', value, onChange, placeholder, name, disabled = false, min, error, required = false }) => (
     <div>
         <label htmlFor={name} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
         <div className="relative">
@@ -674,9 +674,15 @@ const Input = ({ label, type = 'text', value, onChange, placeholder, name, disab
                 placeholder={placeholder}
                 disabled={disabled}
                 min={min}
-                className="w-full pl-3 pr-10 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm text-gray-900 dark:text-white disabled:bg-gray-200 dark:disabled:bg-gray-600"
+                required={required}
+                className={`w-full pl-3 pr-10 py-2 bg-gray-50 dark:bg-gray-700 border rounded-md shadow-sm focus:outline-none sm:text-sm text-gray-900 dark:text-white disabled:bg-gray-200 dark:disabled:bg-gray-600 ${
+                    error 
+                        ? 'border-red-500 focus:ring-red-500 focus:border-red-500' 
+                        : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500'
+                }`}
             />
         </div>
+        {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
     </div>
 );
 
@@ -1633,15 +1639,23 @@ const ProviderBookingDetailPage = ({ bookingId, goBack, onAction }) => {
                     </Card>
                     <Card>
                         <h2 className="text-xl font-bold mb-4">Pet(s) for this Service</h2>
-                        {pets.map(pet => (
-                            <div key={pet.petid} className="flex items-center gap-4 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg not-last:mb-2">
-                                <img src={pet.picture} alt={pet.name} className="h-16 w-16 rounded-full object-cover"/>
-                                <div>
-                                    <h3 className="font-bold">{pet.name}</h3>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">{pet.breed}</p>
+                        {pets.map(pet => {
+                            const placeholderImage = "data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23e5e7eb'/%3e%3ctext x='50' y='50' font-size='12' text-anchor='middle' dy='.3em' fill='%23374151'%3eNo Image%3c/text%3e%3c/svg%3e";
+                            return (
+                                <div key={pet.petid} className="flex items-center gap-4 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg not-last:mb-2">
+                                    <img 
+                                        src={pet.picture || placeholderImage} 
+                                        alt={pet.name} 
+                                        className="h-16 w-16 rounded-full object-cover"
+                                        onError={(e) => { e.target.src = placeholderImage; }}
+                                    />
+                                    <div>
+                                        <h3 className="font-bold">{pet.name}</h3>
+                                        <p className="text-sm text-gray-500 dark:text-gray-400">{pet.breed}</p>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </Card>
                 </div>
 
@@ -2251,6 +2265,8 @@ const PetOwnerDashboard = ({ setPage, setSelectedBookingId, openReviewModal }) =
 
 const PetFormModal = ({ isOpen, onClose, onSave, pet }) => {
     const [formData, setFormData] = useState({ name: '', breed: '', age: '', dob: '', description: '', picture: '' });
+    const [errors, setErrors] = useState({});
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
         if (pet) {
@@ -2265,10 +2281,18 @@ const PetFormModal = ({ isOpen, onClose, onSave, pet }) => {
         } else {
             setFormData({ name: '', breed: '', age: '', dob: '', description: '', picture: '' });
         }
+        setErrors({}); // Clear errors when modal opens/closes
+        setIsSubmitting(false); // Reset submitting state when modal opens/closes
     }, [pet, isOpen]);
 
     const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
+        const { name, value } = e.target;
+        setFormData({ ...formData, [name]: value });
+        
+        // Clear error for this field when user starts typing
+        if (errors[name]) {
+            setErrors({ ...errors, [name]: '' });
+        }
     };
 
     const handleImageUpload = (e) => {
@@ -2277,59 +2301,134 @@ const PetFormModal = ({ isOpen, onClose, onSave, pet }) => {
             const reader = new FileReader();
             reader.onloadend = () => {
                 setFormData({ ...formData, picture: reader.result });
+                
+                // Clear picture error when image is uploaded
+                if (errors.picture) {
+                    setErrors({ ...errors, picture: '' });
+                }
             };
             reader.readAsDataURL(file);
         }
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        onSave(formData);
+        
+        // Prevent multiple submissions
+        if (isSubmitting) return;
+        
+        // Validate required fields
+        const newErrors = {};
+        
+        if (!formData.name || !formData.name.trim()) {
+            newErrors.name = 'Pet name is required';
+        }
+        
+        if (!formData.breed || !formData.breed.trim()) {
+            newErrors.breed = 'Pet breed is required';
+        }
+        
+        if (!formData.picture) {
+            newErrors.picture = 'Pet picture is required';
+        }
+        
+        // If there are validation errors, show them and don't submit
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors);
+            return;
+        }
+        
+        // Clear errors and submit
+        setErrors({});
+        setIsSubmitting(true);
+        
+        try {
+            await onSave(formData);
+        } catch (error) {
+            console.error('Error saving pet:', error);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={pet ? 'Edit Pet' : 'Add a New Pet'}>
             <form onSubmit={handleSubmit} className="space-y-4">
-                <Input label="Pet Name" name="name" value={formData.name} onChange={handleChange} placeholder="Buddy" />
-                <Input label="Breed" name="breed" value={formData.breed} onChange={handleChange} placeholder="Golden Retriever" />
+                <Input 
+                    label="Pet Name *" 
+                    name="name" 
+                    value={formData.name} 
+                    onChange={handleChange} 
+                    placeholder="Buddy" 
+                    required
+                    error={errors.name}
+                />
+                <Input 
+                    label="Breed *" 
+                    name="breed" 
+                    value={formData.breed} 
+                    onChange={handleChange} 
+                    placeholder="Golden Retriever" 
+                    required
+                    error={errors.breed}
+                />
                 <Input label="Age" name="age" type="number" value={formData.age} onChange={handleChange} placeholder="5" />
                 <Input label="Date of Birth" name="dob" type="date" value={formData.dob} onChange={handleChange} />
                 <TextArea label="Description" name="description" value={formData.description} onChange={handleChange} placeholder="Loves walks and belly rubs..."/>
 
                 <div>
-                    <label htmlFor="picture" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Pet Picture</label>
+                    <label htmlFor="picture" className={`block text-sm font-medium mb-1 ${errors.picture ? 'text-red-600' : 'text-gray-700 dark:text-gray-300'}`}>
+                        Pet Picture *
+                        <span className="text-xs text-gray-500 ml-1">(JPG/PNG, max 5MB)</span>
+                    </label>
                     <input
                         type="file"
                         id="picture"
                         name="picture"
                         accept="image/png, image/jpeg"
                         onChange={handleImageUpload}
-                        className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                        className={`w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 ${
+                            errors.picture ? 'border border-red-500 rounded-md' : ''
+                        }`}
+                        required={!pet} // Only required for new pets
                     />
+                    {errors.picture && <p className="mt-1 text-sm text-red-600">{errors.picture}</p>}
                     {formData.picture && <img src={formData.picture} alt="Pet preview" className="mt-2 h-24 w-24 object-cover rounded-md" />}
                 </div>
 
                 <div className="flex justify-end gap-2 pt-4">
-                    <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-                    <Button type="submit">Save Pet</Button>
+                    <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>Cancel</Button>
+                    <Button type="submit" disabled={isSubmitting}>
+                        {isSubmitting ? 'Saving...' : 'Save Pet'}
+                    </Button>
                 </div>
             </form>
         </Modal>
     );
 };
 
-const PetCard = ({ pet, onEdit, onDelete, navigate, setSelectedPetId }) => (
-    <Card className="flex flex-col text-center cursor-pointer hover:shadow-lg transition-shadow" onClick={() => { setSelectedPetId(pet.petid); navigate('petDetail'); }}>
-        <img src={pet.picture} alt={pet.name} className="w-full h-48 object-cover rounded-lg mb-4" />
-        <h3 className="text-xl font-bold">{pet.name}</h3>
-        <p className="text-gray-500 dark:text-gray-400">{pet.breed}</p>
-        <p className="text-sm text-gray-600 dark:text-gray-300 mt-2 flex-grow">{pet.description}</p>
-        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-center gap-2">
-            <Button variant="secondary" onClick={(e) => { e.stopPropagation(); onEdit(pet); }}>Edit</Button>
-            <Button variant="danger" onClick={(e) => { e.stopPropagation(); onDelete(pet.petid); }}>Delete</Button>
-        </div>
-    </Card>
-);
+const PetCard = ({ pet, onEdit, onDelete, navigate, setSelectedPetId }) => {
+    // Placeholder image for pets without pictures
+    const placeholderImage = "data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23e5e7eb'/%3e%3ctext x='50' y='50' font-size='12' text-anchor='middle' dy='.3em' fill='%23374151'%3eNo Image%3c/text%3e%3c/svg%3e";
+    
+    return (
+        <Card className="flex flex-col text-center cursor-pointer hover:shadow-lg transition-shadow" onClick={() => { setSelectedPetId(pet.petid); navigate('petDetail'); }}>
+            <img 
+                src={pet.picture || placeholderImage} 
+                alt={pet.name} 
+                className="w-full h-48 object-cover rounded-lg mb-4" 
+                onError={(e) => { e.target.src = placeholderImage; }}
+            />
+            <h3 className="text-xl font-bold">{pet.name}</h3>
+            <p className="text-gray-500 dark:text-gray-400">{pet.breed}</p>
+            <p className="text-sm text-gray-600 dark:text-gray-300 mt-2 flex-grow">{pet.description}</p>
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-center gap-2">
+                <Button variant="secondary" onClick={(e) => { e.stopPropagation(); onEdit(pet); }}>Edit</Button>
+                <Button variant="danger" onClick={(e) => { e.stopPropagation(); onDelete(pet.petid); }}>Delete</Button>
+            </div>
+        </Card>
+    );
+};
 
 const MyPetsPage = ({ navigate, setSelectedPetId }) => {
     const [pets, setPets] = useState([]);
@@ -2339,9 +2438,22 @@ const MyPetsPage = ({ navigate, setSelectedPetId }) => {
 
     const fetchPets = async () => {
         setLoading(true);
-        const res = await api.pets.getAll();
-        if (res.success) {
-            setPets(res.pets);
+        try {
+            const res = await api.pets.getAll();
+            console.log('Fetch pets response:', res); // Debug log
+            if (res && res.pets) {
+                console.log('Setting pets:', res.pets); // Debug log
+                setPets(res.pets);
+            } else if (res && res.success === false) {
+                console.error('Failed to fetch pets:', res.error || res.message);
+                setPets([]);
+            } else {
+                console.warn('Unexpected response format:', res);
+                setPets([]);
+            }
+        } catch (error) {
+            console.error('Error fetching pets:', error);
+            setPets([]);
         }
         setLoading(false);
     };
@@ -2368,13 +2480,39 @@ const MyPetsPage = ({ navigate, setSelectedPetId }) => {
     };
 
     const handleSavePet = async (formData) => {
-        if (selectedPet) {
-            await api.pets.update(selectedPet.petid, formData);
-        } else {
-            await api.pets.create(formData);
+        try {
+            console.log('Saving pet with data:', formData); // Debug log
+            let result;
+            if (selectedPet) {
+                result = await api.pets.update(selectedPet.petid, formData);
+            } else {
+                result = await api.pets.create(formData);
+            }
+            
+            console.log('Save pet result:', result); // Debug log
+            
+            // Check if the API call was successful
+            if (result && result.success === false) {
+                // Handle API error response
+                let errorMessage = 'Failed to save pet. Please try again.';
+                
+                if (result.error) {
+                    errorMessage = result.error;
+                } else if (result.message) {
+                    errorMessage = result.message;
+                }
+                
+                alert('Error: ' + errorMessage);
+                return;
+            }
+            
+            console.log('Pet saved successfully, refreshing pets list...'); // Debug log
+            fetchPets();
+            setIsModalOpen(false);
+        } catch (error) {
+            console.error('Error saving pet:', error);
+            alert('Error: Network error or server is unreachable.');
         }
-        fetchPets();
-        setIsModalOpen(false);
     };
 
     if (loading) return <div className="p-8"><Spinner /></div>;
@@ -2637,7 +2775,17 @@ const PetDetailPage = ({ petId, navigate, goBack }) => {
             </Button>
             <div className="flex flex-col md:flex-row gap-8 items-start">
                 <div className="w-full md:w-1/3 text-center">
-                    <img src={pet.picture} alt={pet.name} className="w-48 h-48 mx-auto rounded-full object-cover mb-4 shadow-lg" />
+                    {(() => {
+                        const placeholderImage = "data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23e5e7eb'/%3e%3ctext x='50' y='50' font-size='12' text-anchor='middle' dy='.3em' fill='%23374151'%3eNo Image%3c/text%3e%3c/svg%3e";
+                        return (
+                            <img 
+                                src={pet.picture || placeholderImage} 
+                                alt={pet.name} 
+                                className="w-48 h-48 mx-auto rounded-full object-cover mb-4 shadow-lg" 
+                                onError={(e) => { e.target.src = placeholderImage; }}
+                            />
+                        );
+                    })()}
                     <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{pet.name}</h1>
                     <p className="text-md text-gray-500 dark:text-gray-400">{pet.breed}</p>
                 </div>
@@ -4934,15 +5082,23 @@ const BookingDetailPage = ({ bookingId, navigate, setSelectedBookingId, setSelec
 
                     <section>
                         <h2 className="text-2xl font-bold border-b pb-4 mb-4">Your Pet(s) for this Service</h2>
-                        {booking.pets.map(pet => (
-                            <div key={pet.petid} className="flex items-center gap-4 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                                <img src={pet.picture} alt={pet.name} className="h-16 w-16 rounded-full object-cover"/>
-                                <div>
-                                    <h3 className="font-bold">{pet.name}</h3>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">{pet.breed}</p>
+                        {booking.pets.map(pet => {
+                            const placeholderImage = "data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23e5e7eb'/%3e%3ctext x='50' y='50' font-size='12' text-anchor='middle' dy='.3em' fill='%23374151'%3eNo Image%3c/text%3e%3c/svg%3e";
+                            return (
+                                <div key={pet.petid} className="flex items-center gap-4 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                                    <img 
+                                        src={pet.picture || placeholderImage} 
+                                        alt={pet.name} 
+                                        className="h-16 w-16 rounded-full object-cover"
+                                        onError={(e) => { e.target.src = placeholderImage; }}
+                                    />
+                                    <div>
+                                        <h3 className="font-bold">{pet.name}</h3>
+                                        <p className="text-sm text-gray-500 dark:text-gray-400">{pet.breed}</p>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </section>
 
                     <section>

@@ -1,7 +1,6 @@
 import express from 'express'
-import multer from 'multer';
-import path from 'path';
 import fs from 'fs';
+import path from 'path';
 import db from '../db.js'
 import { validatePetCreation, validatePetUpdate } from '../middleware/validationMiddleware.js'
 import authMiddleware from '../middleware/authMiddleware.js';
@@ -43,9 +42,62 @@ router.get('/', authMiddleware, async (req, res) => {
             ORDER BY name ASC
         `, [userId]);
 
+        // Process the pets to handle the picture field correctly
+        const processedPets = pets.map(pet => {
+            let pictureUrl = null;
+            
+            if (pet.picture) {
+                if (Buffer.isBuffer(pet.picture)) {
+                    // Convert buffer to string to check if it's a file path
+                    const bufferString = pet.picture.toString('utf8');
+                    
+                    // Check if the buffer contains a file path
+                    if (bufferString.includes('uploads/') || bufferString.includes('.png') || bufferString.includes('.jpg') || bufferString.includes('.jpeg')) {
+                        // It's a file path - for now, set to null (missing file)
+                        // We could try to read the file, but many are missing
+                        console.warn(`Pet ${pet.petid} has file path but file may be missing: ${bufferString}`);
+                        pictureUrl = null;
+                    } else {
+                        // Check if it looks like actual binary image data
+                        try {
+                            const first4Bytes = pet.picture.slice(0, 4);
+                            const pngSignature = Buffer.from([0x89, 0x50, 0x4E, 0x47]);
+                            const jpegSignature = Buffer.from([0xFF, 0xD8, 0xFF]);
+                            
+                            if (first4Bytes.equals(pngSignature) || pet.picture.slice(0, 3).equals(jpegSignature)) {
+                                // It's actual image data
+                                const mimeType = first4Bytes.equals(pngSignature) ? 'image/png' : 'image/jpeg';
+                                pictureUrl = `data:${mimeType};base64,${pet.picture.toString('base64')}`;
+                            } else {
+                                console.warn(`Unrecognized image data format for pet ${pet.petid}`);
+                                pictureUrl = null;
+                            }
+                        } catch (err) {
+                            console.warn('Could not process image data for pet', pet.petid, err.message);
+                            pictureUrl = null;
+                        }
+                    }
+                } else if (typeof pet.picture === 'string') {
+                    // If picture is already a string, check if it's a base64 data URL
+                    if (pet.picture.startsWith('data:')) {
+                        pictureUrl = pet.picture;
+                    } else {
+                        // It's likely a file path - set to null for now
+                        console.warn(`Pet ${pet.petid} has string file path: ${pet.picture}`);
+                        pictureUrl = null;
+                    }
+                }
+            }
+            
+            return {
+                ...pet,
+                picture: pictureUrl
+            };
+        });
+
         res.status(200).json({
             message: 'Pets retrieved successfully',
-            pets: pets
+            pets: processedPets
         });
 
     } catch (err) {
@@ -56,7 +108,6 @@ router.get('/', authMiddleware, async (req, res) => {
 
 // Add a new pet for the authenticated pet owner
 router.post('/', authMiddleware, async (req, res) => {
-    let filepath = null;
     try {
         const { userid: userId, role: userRole } = req.user;
         const { name, breed, age, description, dob, picture } = req.body; // picture is now base64
@@ -95,33 +146,21 @@ router.post('/', authMiddleware, async (req, res) => {
             });
         }
 
-       // Handle base64 image
-        const uploadDir = 'uploads/pets';
-        if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
-        }
-
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const fileExtension = picture.match(/^data:image\/(jpeg|jpg|png)/)[1];
-        const filename = `pet-${uniqueSuffix}.${fileExtension}`;
-        filepath = path.join(uploadDir, filename);
-
         // Convert base64 to buffer
         const base64Data = picture.split(',')[1];
         const imageBuffer = Buffer.from(base64Data, 'base64');
 
+        // Convert dob to MySQL date format if provided
+        const mysqlDob = dob ? new Date(dob).toISOString().split('T')[0] : null;
+
         // Use the transaction wrapper for proper transaction handling
         try {
             const newPet = await db.transaction(async (connection) => {
-                // Save file to disk
-                fs.writeFileSync(filepath, imageBuffer);
-
-                // Insert new pet
-                const relativePath = filepath.replace(/\\/g, '/');
+                // Insert new pet with image data directly in BLOB field
                 const [result] = await connection.execute(`
                     INSERT INTO pet (name, breed, description, age, dob, picture, userid)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                `, [name, breed, description || null, age || null, dob || null, relativePath, userId]);
+                `, [name, breed, description || null, age || null, mysqlDob, imageBuffer, userId]);
 
                 // Get the newly created pet
                 const [petRows] = await connection.execute(`
@@ -130,7 +169,13 @@ router.post('/', authMiddleware, async (req, res) => {
                     WHERE petid = ?
                 `, [result.insertId]);
 
-                return petRows[0];
+                // Convert the picture BLOB to base64 for response
+                const pet = petRows[0];
+                if (pet.picture && Buffer.isBuffer(pet.picture)) {
+                    pet.picture = `data:image/png;base64,${pet.picture.toString('base64')}`;
+                }
+
+                return pet;
             });
 
             res.status(201).json({
@@ -141,15 +186,6 @@ router.post('/', authMiddleware, async (req, res) => {
 
         } catch (err) {
             console.error('Add pet error:', err);
-            
-            // Clean up uploaded file if exists
-            if (filepath && fs.existsSync(filepath)) {
-                try {
-                    fs.unlinkSync(filepath);
-                } catch (unlinkErr) {
-                    console.error('File cleanup error:', unlinkErr);
-                }
-            }
             
             if (err.message.includes('UNIQUE constraint failed')) {
                 return res.status(409).json({ 
@@ -211,8 +247,13 @@ router.get('/:petId', authMiddleware, async (req, res) => {
             });
         }
 
-        // Remove userid from response
+        // Remove userid from response and convert picture BLOB to base64
         const { userid, ...petData } = pet;
+        
+        // Convert picture BLOB to base64 if it's a Buffer
+        if (petData.picture && Buffer.isBuffer(petData.picture)) {
+            petData.picture = `data:image/png;base64,${petData.picture.toString('base64')}`;
+        }
 
         res.status(200).json({
             message: 'Pet retrieved successfully',
@@ -226,9 +267,6 @@ router.get('/:petId', authMiddleware, async (req, res) => {
 });
 
 router.put('/:id', authMiddleware, async (req, res) => {
-    let newFilepath = null;
-    let oldPicturePath = null;
-    
     try {
         const petId = req.params.id;
         const { userid: userId, role: userRole } = req.user;
@@ -263,10 +301,15 @@ router.put('/:id', authMiddleware, async (req, res) => {
         if (breed) { updateFields.push('breed = ?'); params.push(breed); }
         if (age) { updateFields.push('age = ?'); params.push(age); }
         if (description) { updateFields.push('description = ?'); params.push(description); }
-        if (dob) { updateFields.push('dob = ?'); params.push(dob); }
+        if (dob) { 
+            // Convert ISO date to MySQL date format (YYYY-MM-DD)
+            const mysqlDate = new Date(dob).toISOString().split('T')[0];
+            updateFields.push('dob = ?'); 
+            params.push(mysqlDate); 
+        }
 
         // Handle image upload if provided
-         if (picture) {
+        if (picture) {
             if (!validateBase64Image(picture)) {
                 return res.status(400).json({
                     success: false,
@@ -274,35 +317,16 @@ router.put('/:id', authMiddleware, async (req, res) => {
                 });
             }
 
-            const uploadDir = 'uploads/pets';
-            if (!fs.existsSync(uploadDir)) {
-                fs.mkdirSync(uploadDir, { recursive: true });
-            }
-
-            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-            const fileExtension = picture.match(/^data:image\/(jpeg|jpg|png)/)[1];
-            const filename = `pet-${uniqueSuffix}.${fileExtension}`;
-            newFilepath = path.join(uploadDir, filename);
-            
-            // Store old picture path for cleanup
-            oldPicturePath = existingPet.picture;
-            
-            // Add picture to update fields
-            const relativePath = newFilepath.replace(/\\/g, '/');
+            // Convert base64 to buffer and add to update fields
+            const base64Data = picture.split(',')[1];
+            const imageBuffer = Buffer.from(base64Data, 'base64');
             updateFields.push('picture = ?');
-            params.push(relativePath);
+            params.push(imageBuffer);
         }
 
         // Use the transaction wrapper for proper transaction handling
         try {
             const updatedPet = await db.transaction(async (connection) => {
-                // Save new image if exists
-                if (picture) {
-                    const base64Data = picture.split(',')[1];
-                    const imageBuffer = Buffer.from(base64Data, 'base64');
-                    fs.writeFileSync(newFilepath, imageBuffer);
-                }
-
                 // Update pet record
                 const updateQuery = `
                     UPDATE pet 
@@ -313,18 +337,20 @@ router.put('/:id', authMiddleware, async (req, res) => {
 
                 await connection.execute(updateQuery, params);
 
-                // Delete old image if it was updated
-                if (oldPicturePath && fs.existsSync(oldPicturePath)) {
-                    fs.unlinkSync(oldPicturePath);
-                }
-
                 // Get updated pet details
                 const [petRows] = await connection.execute(`
                     SELECT petid, name, breed, description, age, dob, picture
                     FROM pet WHERE petid = ?
                 `, [petId]);
 
-                return petRows[0];
+                const pet = petRows[0];
+                
+                // Convert picture BLOB to base64 for response
+                if (pet.picture && Buffer.isBuffer(pet.picture)) {
+                    pet.picture = `data:image/png;base64,${pet.picture.toString('base64')}`;
+                }
+
+                return pet;
             });
 
             res.json({
@@ -335,15 +361,6 @@ router.put('/:id', authMiddleware, async (req, res) => {
 
         } catch (err) {
             console.error('Update pet error:', err);
-
-            // Clean up new uploaded file if exists
-            if (newFilepath && fs.existsSync(newFilepath)) {
-                try {
-                    fs.unlinkSync(newFilepath);
-                } catch (unlinkErr) {
-                    console.error('File cleanup error:', unlinkErr);
-                }
-            }
 
             res.status(500).json({
                 success: false,
