@@ -21,8 +21,8 @@ router.get('/', async (req, res) => {
             SELECT 
                 ps.petscheduleid, ps.startdate, ps.repeat_option, ps.hour, ps.minute,
                 ps.dietid, ps.activityid,
-                d.name as diet_name, d.amount as diet_amount,
-                a.name as activity_name,
+                d.name as diet_name, d.amount as diet_amount, d.description as diet_description,
+                a.name as activity_name, a.description as activity_description,
                 p.name as pet_name, p.petid
             FROM petschedule ps
             LEFT JOIN diet d ON ps.dietid = d.dietid
@@ -33,6 +33,7 @@ router.get('/', async (req, res) => {
         `, [userId]);
 
         res.status(200).json({
+            success: true,
             message: 'All schedules retrieved successfully',
             schedules: schedules
         });
@@ -80,8 +81,8 @@ router.get('/pet/:petId', async (req, res) => {
             SELECT 
                 ps.petscheduleid, ps.startdate, ps.repeat_option, ps.hour, ps.minute,
                 ps.dietid, ps.activityid,
-                d.name as diet_name, d.amount as diet_amount,
-                a.name as activity_name
+                d.name as diet_name, d.amount as diet_amount, d.description as diet_description,
+                a.name as activity_name, a.description as activity_description
             FROM petschedule ps
             LEFT JOIN diet d ON ps.dietid = d.dietid
             LEFT JOIN activity a ON ps.activityid = a.activityid
@@ -90,6 +91,7 @@ router.get('/pet/:petId', async (req, res) => {
         `, [petId, petId]);
 
         res.status(200).json({
+            success: true,
             message: `Schedules for ${pet.name} retrieved successfully`,
             pet: {
                 id: petId,
@@ -158,47 +160,50 @@ router.post('/', validateScheduleCreation, async (req, res) => {
             });
         }
 
-        // Start transaction
-        const connection = await db.beginTransaction();
+        // Use the transaction wrapper for proper transaction handling
         try {
-            // Insert new schedule
-            const result = await connection.execute(`
-                INSERT INTO petschedule (startdate, repeat_option, hour, minute, dietid, activityid)
-                VALUES (?, ?, ?, ?, ?, ?)
-            `, [
-                startdate,
-                repeat_option,
-                hour,
-                minute,
-                dietid || null,
-                activityid || null
-            ]);
+            const newSchedule = await db.transaction(async (connection) => {
+                // Insert new schedule
+                const [result] = await connection.execute(`
+                    INSERT INTO petschedule (startdate, repeat_option, hour, minute, dietid, activityid)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                `, [
+                    startdate,
+                    repeat_option,
+                    hour,
+                    minute,
+                    dietid || null,
+                    activityid || null
+                ]);
 
-            // Get the newly created schedule
-            const newSchedule = await connection.get(`
-                SELECT 
-                    ps.petscheduleid, ps.startdate, ps.repeat_option, ps.hour, ps.minute,
-                    ps.dietid, ps.activityid,
-                    d.name as diet_name, d.amount as diet_amount,
-                    a.name as activity_name,
-                    p.name as pet_name
-                FROM petschedule ps
-                LEFT JOIN diet d ON ps.dietid = d.dietid
-                LEFT JOIN activity a ON ps.activityid = a.activityid
-                LEFT JOIN pet p ON (d.petid = p.petid OR a.petid = p.petid)
-                WHERE ps.petscheduleid = ?
-            `, [result.insertId]);
+                // Get the newly created schedule
+                const [scheduleRows] = await connection.execute(`
+                    SELECT 
+                        ps.petscheduleid, ps.startdate, ps.repeat_option, ps.hour, ps.minute,
+                        ps.dietid, ps.activityid,
+                        d.name as diet_name, d.amount as diet_amount,
+                        a.name as activity_name,
+                        p.name as pet_name
+                    FROM petschedule ps
+                    LEFT JOIN diet d ON ps.dietid = d.dietid
+                    LEFT JOIN activity a ON ps.activityid = a.activityid
+                    LEFT JOIN pet p ON (d.petid = p.petid OR a.petid = p.petid)
+                    WHERE ps.petscheduleid = ?
+                `, [result.insertId]);
 
-            await connection.commit();
+                return scheduleRows[0];
+            });
+
+            console.log('✅ Schedule created successfully:', newSchedule);
 
             res.status(201).json({
+                success: true,
                 message: 'Schedule added successfully',
                 schedule: newSchedule
             });
 
-        } catch (transactionError) {
-            await connection.rollback();
-            throw transactionError;
+        } catch (transactionErr) {
+            throw transactionErr;
         }
 
     } catch (err) {
@@ -325,8 +330,8 @@ router.put('/:scheduleId', validateScheduleUpdate, async (req, res) => {
             
             await connection.execute(`UPDATE petschedule SET ${setClause} WHERE petscheduleid = ?`, [...values, scheduleId]);
 
-            // Get updated schedule
-            const updatedSchedule = await connection.get(`
+            // Get updated schedule using the raw connection query method
+            const [updatedScheduleRows] = await connection.execute(`
                 SELECT 
                     ps.petscheduleid, ps.startdate, ps.repeat_option, ps.hour, ps.minute,
                     ps.dietid, ps.activityid,
@@ -341,14 +346,17 @@ router.put('/:scheduleId', validateScheduleUpdate, async (req, res) => {
             `, [scheduleId]);
 
             await connection.commit();
+            connection.release();
 
             res.status(200).json({
+                success: true,
                 message: 'Schedule updated successfully',
-                schedule: updatedSchedule
+                schedule: updatedScheduleRows[0]
             });
 
         } catch (transactionError) {
             await connection.rollback();
+            connection.release();
             throw transactionError;
         }
 
@@ -380,7 +388,7 @@ router.delete('/:scheduleId', async (req, res) => {
         const connection = await db.beginTransaction();
         try {
             // Get schedule info before deletion and verify ownership
-            const schedule = await connection.get(`
+            const [scheduleRows] = await connection.execute(`
                 SELECT 
                     ps.petscheduleid, ps.startdate, ps.hour, ps.minute,
                     d.name as diet_name, a.name as activity_name,
@@ -392,32 +400,39 @@ router.delete('/:scheduleId', async (req, res) => {
                 WHERE ps.petscheduleid = ?
             `, [scheduleId]);
 
+            const schedule = scheduleRows[0];
+
             if (!schedule) {
                 await connection.rollback();
+                connection.release();
                 return res.status(404).json({ message: 'Schedule not found' });
             }
 
             if (schedule.userid !== userId) {
                 await connection.rollback();
+                connection.release();
                 return res.status(403).json({ 
                     message: 'Access denied. You can only delete schedules for your own pets.' 
                 });
             }
 
             // Delete schedule
-            const result = await connection.execute(`DELETE FROM petschedule WHERE petscheduleid = ?`, [scheduleId]);
+            const [result] = await connection.execute(`DELETE FROM petschedule WHERE petscheduleid = ?`, [scheduleId]);
 
             if (result.affectedRows === 0) {
                 await connection.rollback();
+                connection.release();
                 return res.status(404).json({ message: 'Schedule not found or already deleted' });
             }
 
             await connection.commit();
+            connection.release();
 
             const itemName = schedule.diet_name || schedule.activity_name;
             console.log(`Schedule deleted: ${itemName} for pet ${schedule.pet_name} by user ${userId}`);
 
             res.status(200).json({
+                success: true,
                 message: 'Schedule deleted successfully',
                 deletedSchedule: {
                     id: schedule.petscheduleid,
@@ -429,6 +444,7 @@ router.delete('/:scheduleId', async (req, res) => {
 
         } catch (transactionError) {
             await connection.rollback();
+            connection.release();
             throw transactionError;
         }
 

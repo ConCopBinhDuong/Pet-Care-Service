@@ -250,12 +250,56 @@ router.get('/:petId', authMiddleware, async (req, res) => {
         // Remove userid from response and convert picture BLOB to base64
         const { userid, ...petData } = pet;
         
-        // Convert picture BLOB to base64 if it's a Buffer
-        if (petData.picture && Buffer.isBuffer(petData.picture)) {
-            petData.picture = `data:image/png;base64,${petData.picture.toString('base64')}`;
+        // Process the picture field similar to how we do in the GET all pets route
+        let pictureUrl = null;
+        
+        if (petData.picture) {
+            if (Buffer.isBuffer(petData.picture)) {
+                // Convert buffer to string to check if it's a file path
+                const bufferString = petData.picture.toString('utf8');
+                
+                // Check if the buffer contains a file path
+                if (bufferString.includes('uploads/') || bufferString.includes('.png') || bufferString.includes('.jpg') || bufferString.includes('.jpeg')) {
+                    // It's a file path - set to null (missing file)
+                    console.warn(`Pet ${petData.petid} has file path but file may be missing: ${bufferString}`);
+                    pictureUrl = null;
+                } else {
+                    // Check if it looks like actual binary image data
+                    try {
+                        const first4Bytes = petData.picture.slice(0, 4);
+                        const pngSignature = Buffer.from([0x89, 0x50, 0x4E, 0x47]);
+                        const jpegSignature = Buffer.from([0xFF, 0xD8, 0xFF]);
+                        
+                        if (first4Bytes.equals(pngSignature) || petData.picture.slice(0, 3).equals(jpegSignature)) {
+                            // It's actual image data
+                            const mimeType = first4Bytes.equals(pngSignature) ? 'image/png' : 'image/jpeg';
+                            pictureUrl = `data:${mimeType};base64,${petData.picture.toString('base64')}`;
+                        } else {
+                            console.warn(`Unrecognized image data format for pet ${petData.petid}`);
+                            pictureUrl = null;
+                        }
+                    } catch (err) {
+                        console.warn('Could not process image data for pet', petData.petid, err.message);
+                        pictureUrl = null;
+                    }
+                }
+            } else if (typeof petData.picture === 'string') {
+                // If picture is already a string, check if it's a base64 data URL
+                if (petData.picture.startsWith('data:')) {
+                    pictureUrl = petData.picture;
+                } else {
+                    // It's likely a file path - set to null for now
+                    console.warn(`Pet ${petData.petid} has string file path: ${petData.picture}`);
+                    pictureUrl = null;
+                }
+            }
         }
+        
+        // Update the picture field
+        petData.picture = pictureUrl;
 
         res.status(200).json({
+            success: true,
             message: 'Pet retrieved successfully',
             pet: petData
         });

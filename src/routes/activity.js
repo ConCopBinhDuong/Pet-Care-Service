@@ -103,8 +103,16 @@ router.post('/pet/:petId', validateActivityCreation, async (req, res) => {
         const petId = parseInt(req.params.petId);
         const { name, description } = req.body;
 
+        console.log('🏃 Activity creation request received:', {
+            userId,
+            userRole,
+            petId,
+            body: req.body
+        });
+
         // Only pet owners can add activities
         if (userRole !== 'Pet owner') {
+            console.log('❌ Activity creation denied: user is not pet owner');
             return res.status(403).json({ 
                 message: 'Access denied. Only pet owners can add activities.' 
             });
@@ -153,6 +161,7 @@ router.post('/pet/:petId', validateActivityCreation, async (req, res) => {
             });
 
             res.status(201).json({
+                success: true,
                 message: 'Activity added successfully',
                 activity: newActivity
             });

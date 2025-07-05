@@ -336,21 +336,25 @@ export const validateProfileUpdate = (req, res, next) => {
  * Validate activity creation data
  */
 export const validateActivityCreation = (req, res, next) => {
-    const { pet_id, name, notes: description } = req.body;
+    const { name, description } = req.body;
     const errors = [];
 
-    if (!pet_id) {
-        errors.push('Pet ID is required');
-    } else if (typeof pet_id !== 'number' || pet_id <= 0) {
-        errors.push('Pet ID must be a positive number');
-    }
-
+    // Required fields validation
     if (!name) {
         errors.push('Activity name is required');
+    } else if (typeof name !== 'string' || name.trim().length === 0) {
+        errors.push('Activity name must be a non-empty string');
+    } else if (name.trim().length > 20) {
+        errors.push('Activity name must be 20 characters or less');
     }
 
-    if (description !== undefined && typeof description !== 'string') {
-        errors.push('Notes must be a string');
+    // Optional fields validation
+    if (description !== undefined && description !== null) {
+        if (typeof description !== 'string') {
+            errors.push('Description must be a string if provided');
+        } else if (description.trim().length > 500) {
+            errors.push('Description must be 500 characters or less');
+        }
     }
 
     if (errors.length > 0) {

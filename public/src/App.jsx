@@ -165,6 +165,29 @@ const MessageSquare = (props) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
 );
 
+// =================================================================================
+// UTILITY FUNCTIONS
+// =================================================================================
+
+// Helper function to get current date in YYYY-MM-DD format
+const getCurrentDate = () => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+};
+
+// Helper function to format any date to YYYY-MM-DD format for HTML date inputs
+const formatDateForInput = (dateString) => {
+    if (!dateString) return '';
+    try {
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return '';
+        return date.toISOString().split('T')[0];
+    } catch (error) {
+        console.error('Error formatting date:', error);
+        return '';
+    }
+};
+
 
 // =================================================================================
 // LIVE API SERVICE
@@ -331,6 +354,18 @@ const api = {
 
     petSchedule: {
         get: () => fetchApi(`${API_BASE_URL}/pet-schedule`),
+        getForPet: (petId) => fetchApi(`${API_BASE_URL}/pet-schedule/pet/${petId}`),
+        add: (scheduleData) => fetchApi(`${API_BASE_URL}/pet-schedule`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(scheduleData)
+        }),
+        update: (scheduleId, scheduleData) => fetchApi(`${API_BASE_URL}/pet-schedule/${scheduleId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(scheduleData)
+        }),
+        delete: (scheduleId) => fetchApi(`${API_BASE_URL}/pet-schedule/${scheduleId}`, { method: 'DELETE' })
     },
     
     scheduleDashboard: {
@@ -2274,7 +2309,7 @@ const PetFormModal = ({ isOpen, onClose, onSave, pet }) => {
                 name: pet.name || '',
                 breed: pet.breed || '',
                 age: pet.age || '',
-                dob: pet.dob || '',
+                dob: formatDateForInput(pet.dob) || '',
                 description: pet.description || '',
                 picture: pet.picture || ''
             });
@@ -2407,7 +2442,7 @@ const PetFormModal = ({ isOpen, onClose, onSave, pet }) => {
     );
 };
 
-const PetCard = ({ pet, onEdit, onDelete, navigate, setSelectedPetId }) => {
+const PetCard = ({ pet, onEdit, onDelete, navigate, setSelectedPetId, isDeleting = false }) => {
     // Placeholder image for pets without pictures
     const placeholderImage = "data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='%23e5e7eb'/%3e%3ctext x='50' y='50' font-size='12' text-anchor='middle' dy='.3em' fill='%23374151'%3eNo Image%3c/text%3e%3c/svg%3e";
     
@@ -2420,11 +2455,15 @@ const PetCard = ({ pet, onEdit, onDelete, navigate, setSelectedPetId }) => {
                 onError={(e) => { e.target.src = placeholderImage; }}
             />
             <h3 className="text-xl font-bold">{pet.name}</h3>
-            <p className="text-gray-500 dark:text-gray-400">{pet.breed}</p>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mt-2 flex-grow">{pet.description}</p>
             <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-center gap-2">
-                <Button variant="secondary" onClick={(e) => { e.stopPropagation(); onEdit(pet); }}>Edit</Button>
-                <Button variant="danger" onClick={(e) => { e.stopPropagation(); onDelete(pet.petid); }}>Delete</Button>
+                <Button variant="secondary" onClick={(e) => { e.stopPropagation(); onEdit(pet); }} disabled={isDeleting}>Edit</Button>
+                <Button variant="danger" onClick={(e) => { e.stopPropagation(); onDelete(pet.petid); }} disabled={isDeleting}>
+                    {isDeleting ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    ) : (
+                        'Delete'
+                    )}
+                </Button>
             </div>
         </Card>
     );
@@ -2435,6 +2474,7 @@ const MyPetsPage = ({ navigate, setSelectedPetId }) => {
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedPet, setSelectedPet] = useState(null);
+    const [deletingPets, setDeletingPets] = useState(new Set()); // Track pets being deleted
 
     const fetchPets = async () => {
         setLoading(true);
@@ -2473,9 +2513,32 @@ const MyPetsPage = ({ navigate, setSelectedPetId }) => {
     };
 
     const handleDeletePet = async (petId) => {
+        // Prevent multiple deletions of the same pet
+        if (deletingPets.has(petId)) {
+            console.log('🛑 Pet deletion already in progress for ID:', petId);
+            return;
+        }
+
         if(window.confirm("Are you sure you want to delete this pet?")) {
-            await api.pets.delete(petId);
-            fetchPets();
+            // Add to deleting set
+            setDeletingPets(prev => new Set(prev).add(petId));
+            
+            try {
+                console.log('🗑️ Deleting pet with ID:', petId);
+                await api.pets.delete(petId);
+                console.log('✅ Pet deleted successfully');
+                fetchPets();
+            } catch (error) {
+                console.error('❌ Error deleting pet:', error);
+                // You could show an error toast here
+            } finally {
+                // Remove from deleting set
+                setDeletingPets(prev => {
+                    const newSet = new Set(prev);
+                    newSet.delete(petId);
+                    return newSet;
+                });
+            }
         }
     };
 
@@ -2526,7 +2589,7 @@ const MyPetsPage = ({ navigate, setSelectedPetId }) => {
             {pets.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {pets.map(pet => (
-                        <PetCard key={pet.petid} pet={pet} onEdit={handleEditPet} onDelete={handleDeletePet} navigate={navigate} setSelectedPetId={setSelectedPetId}/>
+                        <PetCard key={pet.petid} pet={pet} onEdit={handleEditPet} onDelete={handleDeletePet} navigate={navigate} setSelectedPetId={setSelectedPetId} isDeleting={deletingPets.has(pet.petid)}/>
                     ))}
                 </div>
             ) : (
@@ -2548,68 +2611,232 @@ const MyPetsPage = ({ navigate, setSelectedPetId }) => {
 
 const DietFormModal = ({ isOpen, onClose, onSave, itemToEdit = null }) => {
     const [formData, setFormData] = useState({
-        food_name: '', quantity: '', time: '08:00', description: '',
-        startdate: getCurrentDate(), repeat_option: 'daily', addToCalendar: true, enddate: ''
+        name: '', 
+        amount: '', 
+        description: '',
+        // Schedule fields
+        startdate: '',
+        repeat_option: 'never',
+        hour: 8,
+        minute: 0
     });
+    const [errors, setErrors] = useState([]);
+    const [isLoading, setIsLoading] = useState(false);
+
+    // Repeat options from the database enum
+    const repeatOptions = [
+        { value: 'never', label: 'Never (One-time)' },
+        { value: 'hourly', label: 'Every Hour' },
+        { value: 'daily', label: 'Daily' },
+        { value: 'weekly', label: 'Weekly' },
+        { value: 'biweekly', label: 'Bi-weekly (Every 2 weeks)' },
+        { value: 'monthly', label: 'Monthly' },
+        { value: 'every 3 months', label: 'Every 3 months' },
+        { value: 'every 6 months', label: 'Every 6 months' },
+        { value: 'yearly', label: 'Yearly' }
+    ];
 
     useEffect(() => {
         if (isOpen) {
             if (itemToEdit) {
                 setFormData({
-                    food_name: itemToEdit.food_name || '',
-                    quantity: itemToEdit.quantity || '',
-                    time: `${itemToEdit.hour || '08'}:${itemToEdit.minute || '00'}`,
+                    name: itemToEdit.name || '',
+                    amount: itemToEdit.amount || '',
                     description: itemToEdit.description || '',
-                    startdate: itemToEdit.startdate || getCurrentDate(),
-                    repeat_option: itemToEdit.repeat_option || 'none',
-                    addToCalendar: itemToEdit.addToCalendar !== undefined ? itemToEdit.addToCalendar : true,
-                    enddate: itemToEdit.enddate || ''
+                    // If schedule exists, populate it
+                    startdate: itemToEdit.startdate || new Date().toISOString().split('T')[0],
+                    repeat_option: itemToEdit.repeat_option || 'never',
+                    hour: itemToEdit.hour || 8,
+                    minute: itemToEdit.minute || 0
                 });
             } else {
                 setFormData({
-                    food_name: '', quantity: '', time: '08:00', description: '',
-                    startdate: getCurrentDate(), repeat_option: 'daily', addToCalendar: true, enddate: ''
+                    name: '', 
+                    amount: '', 
+                    description: '',
+                    startdate: new Date().toISOString().split('T')[0], // Default to today
+                    repeat_option: 'daily', // Default to daily for feeding
+                    hour: 8,
+                    minute: 0
                 });
             }
+            setErrors([]);
         }
     }, [isOpen, itemToEdit]);
 
-
     const handleChange = (e) => {
-        const { name, value, type, checked } = e.target;
-        setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+        // Clear errors when user starts typing
+        if (errors.length > 0) {
+            setErrors([]);
+        }
     };
 
-    const handleSubmit = (e) => {
+    const validateForm = () => {
+        const newErrors = [];
+        
+        if (!formData.name || formData.name.trim().length === 0) {
+            newErrors.push('Food name is required');
+        } else if (formData.name.trim().length > 100) {
+            newErrors.push('Food name must be 100 characters or less');
+        }
+        
+        if (formData.amount && formData.amount.trim().length > 50) {
+            newErrors.push('Amount must be 50 characters or less');
+        }
+        
+        if (formData.description && formData.description.trim().length > 500) {
+            newErrors.push('Description must be 500 characters or less');
+        }
+
+        // Schedule validation
+        if (!formData.startdate) {
+            newErrors.push('Start date is required');
+        }
+
+        if (formData.hour < 0 || formData.hour > 23) {
+            newErrors.push('Hour must be between 0 and 23');
+        }
+
+        if (formData.minute < 0 || formData.minute > 59) {
+            newErrors.push('Minute must be between 0 and 59');
+        }
+        
+        return newErrors;
+    };
+
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        onSave(formData);
-        onClose();
+        
+        const validationErrors = validateForm();
+        if (validationErrors.length > 0) {
+            setErrors(validationErrors);
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            await onSave(formData);
+            onClose();
+        } catch (error) {
+            console.error('Error saving diet:', error);
+            setErrors([error.message || 'Failed to save diet']);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={itemToEdit ? "Edit Diet Item" : "Add Diet Item"}>
+        <Modal isOpen={isOpen} onClose={onClose} title={itemToEdit ? "Edit Diet Schedule" : "Add Diet Schedule"}>
             <form onSubmit={handleSubmit} className="space-y-4">
-                <Input label="Food Name/Type" name="food_name" value={formData.food_name} onChange={handleChange} placeholder="e.g., Dry Kibble" />
-                <Input label="Quantity" name="quantity" value={formData.quantity} onChange={handleChange} placeholder="e.g., 2 cups" />
-                <TextArea label="Description / Notes" name="description" value={formData.description} onChange={handleChange} placeholder="e.g., Mix with warm water" rows="2" />
-                <h4 className="text-md font-bold pt-2 border-t">Scheduling</h4>
-                <div className="grid grid-cols-2 gap-4">
-                    <Input label="Start Date" name="startdate" type="date" value={formData.startdate} onChange={handleChange} />
-                    <Input label="Time" name="time" type="time" value={formData.time} onChange={handleChange} />
-                </div>
-                <Select label="Repeat" name="repeat_option" value={formData.repeat_option} onChange={handleChange}>
-                    <option value="none">Does not repeat</option>
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                </Select>
-                {formData.repeat_option !== 'none' && (
-                    <Input label="End Date (optional)" name="enddate" type="date" value={formData.enddate} onChange={handleChange} min={formData.startdate} />
+                {errors.length > 0 && (
+                    <div className="bg-red-50 border border-red-200 rounded p-3">
+                        <h4 className="text-red-800 font-medium mb-1">Please fix the following errors:</h4>
+                        <ul className="text-red-700 text-sm space-y-1">
+                            {errors.map((error, index) => (
+                                <li key={index}>• {error}</li>
+                            ))}
+                        </ul>
+                    </div>
                 )}
-                <Checkbox label="Add to my calendar" name="addToCalendar" checked={formData.addToCalendar} onChange={handleChange}/>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input 
+                        label="Food Name/Type *" 
+                        name="name" 
+                        value={formData.name} 
+                        onChange={handleChange} 
+                        placeholder="e.g., Dry Kibble, Wet Food, Treats"
+                        required
+                    />
+                    <Input 
+                        label="Amount/Quantity" 
+                        name="amount" 
+                        value={formData.amount} 
+                        onChange={handleChange} 
+                        placeholder="e.g., 2 cups, 100g, 1 can"
+                    />
+                </div>
+
+                <TextArea 
+                    label="Description / Notes" 
+                    name="description" 
+                    value={formData.description} 
+                    onChange={handleChange} 
+                    placeholder="e.g., Mix with warm water, Give with medication"
+                    rows="3"
+                />
+
+                {/* Schedule Section */}
+                <div className="border-t pt-4">
+                    <h4 className="text-lg font-medium mb-3 text-gray-900 dark:text-white">Feeding Schedule</h4>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Input 
+                            label="Start Date *" 
+                            name="startdate" 
+                            type="date"
+                            value={formData.startdate} 
+                            onChange={handleChange} 
+                            required
+                        />
+                        
+                        <div>
+                            <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
+                                Repeat Option *
+                            </label>
+                            <select 
+                                name="repeat_option" 
+                                value={formData.repeat_option} 
+                                onChange={handleChange}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                required
+                            >
+                                {repeatOptions.map(option => (
+                                    <option key={option.value} value={option.value}>
+                                        {option.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 mt-4">
+                        <Input 
+                            label="Hour (0-23) *" 
+                            name="hour" 
+                            type="number"
+                            min="0"
+                            max="23"
+                            value={formData.hour} 
+                            onChange={handleChange} 
+                            required
+                        />
+                        <Input 
+                            label="Minute (0-59) *" 
+                            name="minute" 
+                            type="number"
+                            min="0"
+                            max="59"
+                            value={formData.minute} 
+                            onChange={handleChange} 
+                            required
+                        />
+                    </div>
+
+                    <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                        Feeding time: {String(formData.hour).padStart(2, '0')}:{String(formData.minute).padStart(2, '0')}
+                    </div>
+                </div>
 
                 <div className="flex justify-end gap-2 pt-4">
-                    <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-                    <Button type="submit">{itemToEdit ? "Save Changes" : "Add Diet"}</Button>
+                    <Button type="button" variant="secondary" onClick={onClose} disabled={isLoading}>
+                        Cancel
+                    </Button>
+                    <Button type="submit" disabled={isLoading}>
+                        {isLoading ? 'Saving...' : (itemToEdit ? "Save Changes" : "Add Diet Schedule")}
+                    </Button>
                 </div>
             </form>
         </Modal>
@@ -2618,73 +2845,215 @@ const DietFormModal = ({ isOpen, onClose, onSave, itemToEdit = null }) => {
 
 const ActivityFormModal = ({ isOpen, onClose, onSave, itemToEdit = null }) => {
     const [formData, setFormData] = useState({
-        activity_name: '', date: '', time: '', duration: '', notes: '',
-        repeat_option: 'none', addToCalendar: true, enddate: ''
+        name: '', 
+        description: '',
+        // Schedule fields
+        startdate: '',
+        repeat_option: 'never',
+        hour: 8,
+        minute: 0
     });
+    const [errors, setErrors] = useState([]);
+    const [isLoading, setIsLoading] = useState(false);
+
+    // Repeat options from the database enum
+    const repeatOptions = [
+        { value: 'never', label: 'Never (One-time)' },
+        { value: 'hourly', label: 'Every Hour' },
+        { value: 'daily', label: 'Daily' },
+        { value: 'weekly', label: 'Weekly' },
+        { value: 'biweekly', label: 'Bi-weekly (Every 2 weeks)' },
+        { value: 'monthly', label: 'Monthly' },
+        { value: 'every 3 months', label: 'Every 3 months' },
+        { value: 'every 6 months', label: 'Every 6 months' },
+        { value: 'yearly', label: 'Yearly' }
+    ];
 
     useEffect(() => {
         if (isOpen) {
             if (itemToEdit) {
                 setFormData({
-                    activity_name: itemToEdit.activity_name || '',
-                    date: itemToEdit.startdate || getCurrentDate(),
-                    time: itemToEdit.time || '12:00',
-                    duration: itemToEdit.duration || '',
-                    notes: itemToEdit.notes || '',
-                    repeat_option: itemToEdit.repeat_option || 'none',
-                    addToCalendar: itemToEdit.addToCalendar !== undefined ? itemToEdit.addToCalendar : true,
-                    enddate: itemToEdit.enddate || ''
+                    name: itemToEdit.name || '',
+                    description: itemToEdit.description || '',
+                    // If schedule exists, populate it
+                    startdate: itemToEdit.startdate || new Date().toISOString().split('T')[0],
+                    repeat_option: itemToEdit.repeat_option || 'never',
+                    hour: itemToEdit.hour || 8,
+                    minute: itemToEdit.minute || 0
                 });
             } else {
-                const now = new Date();
                 setFormData({
-                    activity_name: '',
-                    date: now.toISOString().split('T')[0],
-                    time: now.toTimeString().slice(0, 5),
-                    duration: '',
-                    notes: '',
-                    repeat_option: 'none',
-                    addToCalendar: true,
-                    enddate: ''
+                    name: '', 
+                    description: '',
+                    startdate: new Date().toISOString().split('T')[0], // Default to today
+                    repeat_option: 'daily', // Default to daily for activities
+                    hour: 8,
+                    minute: 0
                 });
             }
+            setErrors([]);
         }
     }, [isOpen, itemToEdit]);
 
     const handleChange = (e) => {
-        const { name, value, type, checked } = e.target;
-        setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+        // Clear errors when user starts typing
+        if (errors.length > 0) {
+            setErrors([]);
+        }
     };
 
-    const handleSubmit = (e) => {
+    const validateForm = () => {
+        const newErrors = [];
+        
+        if (!formData.name || formData.name.trim().length === 0) {
+            newErrors.push('Activity name is required');
+        } else if (formData.name.trim().length > 20) {
+            newErrors.push('Activity name must be 20 characters or less');
+        }
+        
+        if (formData.description && formData.description.trim().length > 500) {
+            newErrors.push('Description must be 500 characters or less');
+        }
+
+        // Schedule validation
+        if (!formData.startdate) {
+            newErrors.push('Start date is required');
+        }
+
+        if (formData.hour < 0 || formData.hour > 23) {
+            newErrors.push('Hour must be between 0 and 23');
+        }
+
+        if (formData.minute < 0 || formData.minute > 59) {
+            newErrors.push('Minute must be between 0 and 59');
+        }
+        
+        return newErrors;
+    };
+
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        onSave(formData);
-        onClose();
+        
+        const validationErrors = validateForm();
+        if (validationErrors.length > 0) {
+            setErrors(validationErrors);
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            await onSave(formData);
+            onClose();
+        } catch (error) {
+            console.error('Error saving activity:', error);
+            setErrors([error.message || 'Failed to save activity']);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={itemToEdit ? "Edit Activity" : "Log New Activity"}>
+        <Modal isOpen={isOpen} onClose={onClose} title={itemToEdit ? "Edit Activity Schedule" : "Schedule New Activity"}>
             <form onSubmit={handleSubmit} className="space-y-4">
-                <Input label="Activity Name" name="activity_name" value={formData.activity_name} onChange={handleChange} placeholder="e.g., Evening walk" />
-                <Input label="Duration" name="duration" value={formData.duration} onChange={handleChange} placeholder="e.g., 30 minutes" />
-                <TextArea label="Notes" name="notes" value={formData.notes} onChange={handleChange} placeholder="Any extra details about the activity..." />
-                <h4 className="text-md font-bold pt-2 border-t">Scheduling</h4>
-                <div className="grid grid-cols-2 gap-4">
-                    <Input label="Start Date" name="date" type="date" value={formData.date} onChange={handleChange} />
-                    <Input label="Time" name="time" type="time" value={formData.time} onChange={handleChange} />
-                </div>
-                <Select label="Repeat" name="repeat_option" value={formData.repeat_option} onChange={handleChange}>
-                    <option value="none">Does not repeat</option>
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                </Select>
-                {formData.repeat_option !== 'none' && (
-                    <Input label="End Date (optional)" name="enddate" type="date" value={formData.enddate} onChange={handleChange} min={formData.date} />
+                {errors.length > 0 && (
+                    <div className="bg-red-50 border border-red-200 rounded p-3">
+                        <h4 className="text-red-800 font-medium mb-1">Please fix the following errors:</h4>
+                        <ul className="text-red-700 text-sm space-y-1">
+                            {errors.map((error, index) => (
+                                <li key={index}>• {error}</li>
+                            ))}
+                        </ul>
+                    </div>
                 )}
-                <Checkbox label="Add to my calendar" name="addToCalendar" checked={formData.addToCalendar} onChange={handleChange}/>
+                
+                <Input 
+                    label="Activity Name *" 
+                    name="name" 
+                    value={formData.name} 
+                    onChange={handleChange} 
+                    placeholder="e.g., Morning walk, Playing fetch, Grooming"
+                    required
+                />
+                <TextArea 
+                    label="Description / Notes" 
+                    name="description" 
+                    value={formData.description} 
+                    onChange={handleChange} 
+                    placeholder="Any extra details about the activity..."
+                    rows="3"
+                />
+
+                {/* Schedule Section */}
+                <div className="border-t pt-4">
+                    <h4 className="text-lg font-medium mb-3 text-gray-900 dark:text-white">Activity Schedule</h4>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Input 
+                            label="Start Date *" 
+                            name="startdate" 
+                            type="date"
+                            value={formData.startdate} 
+                            onChange={handleChange} 
+                            required
+                        />
+                        
+                        <div>
+                            <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">
+                                Repeat Option *
+                            </label>
+                            <select 
+                                name="repeat_option" 
+                                value={formData.repeat_option} 
+                                onChange={handleChange}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                required
+                            >
+                                {repeatOptions.map(option => (
+                                    <option key={option.value} value={option.value}>
+                                        {option.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 mt-4">
+                        <Input 
+                            label="Hour (0-23) *" 
+                            name="hour" 
+                            type="number"
+                            min="0"
+                            max="23"
+                            value={formData.hour} 
+                            onChange={handleChange} 
+                            required
+                        />
+                        <Input 
+                            label="Minute (0-59) *" 
+                            name="minute" 
+                            type="number"
+                            min="0"
+                            max="59"
+                            value={formData.minute} 
+                            onChange={handleChange} 
+                            required
+                        />
+                    </div>
+
+                    <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                        Activity time: {String(formData.hour).padStart(2, '0')}:{String(formData.minute).padStart(2, '0')}
+                    </div>
+                </div>
+
                 <div className="flex justify-end gap-2 pt-4">
-                    <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-                    <Button type="submit">{itemToEdit ? "Save Changes" : "Log Activity"}</Button>
+                    <Button type="button" variant="secondary" onClick={onClose} disabled={isLoading}>
+                        Cancel
+                    </Button>
+                    <Button type="submit" disabled={isLoading}>
+                        {isLoading ? 'Saving...' : (itemToEdit ? "Save Changes" : "Schedule Activity")}
+                    </Button>
                 </div>
             </form>
         </Modal>
@@ -2696,6 +3065,16 @@ const PetDetailPage = ({ petId, navigate, goBack }) => {
     const [diet, setDiet] = useState([]);
     const [activities, setActivities] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [deletingItems, setDeletingItems] = useState(new Set()); // Track items being deleted
+
+    console.log('🔄 Frontend: PetDetailPage render - Current state:', {
+        petId,
+        pet: pet?.name || 'null',
+        dietLength: diet.length,
+        activitiesLength: activities.length,
+        loading,
+        deletingItems: Array.from(deletingItems)
+    });
 
     const [isDietModalOpen, setIsDietModalOpen] = useState(false);
     const [editingDiet, setEditingDiet] = useState(null);
@@ -2704,17 +3083,83 @@ const PetDetailPage = ({ petId, navigate, goBack }) => {
     const [editingActivity, setEditingActivity] = useState(null);
 
     const fetchData = async () => {
+        console.log('📥 Frontend: Fetching data for pet ID:', petId);
         setLoading(true);
-        const [petRes, dietRes, activityRes] = await Promise.all([
-            api.pets.getById(petId),
-            api.diet.getForPet(petId),
-            api.activity.getForPet(petId),
-        ]);
+        
+        try {
+            const [petRes, dietRes, activityRes, scheduleRes] = await Promise.all([
+                api.pets.getById(petId),
+                api.diet.getForPet(petId),
+                api.activity.getForPet(petId),
+                api.petSchedule.getForPet(petId).catch(err => {
+                    console.error('❌ Frontend: Error fetching schedules:', err);
+                    return { error: err.message };
+                }),
+            ]);
 
-        if (petRes.success) setPet(petRes.pet);
-        if (dietRes.success) setDiet(dietRes.diet);
-        if (activityRes.success) setActivities(activityRes.activities);
-        setLoading(false);
+            console.log('📥 Frontend: API responses:', {
+                petRes: petRes,
+                dietRes: dietRes,
+                activityRes: activityRes,
+                scheduleRes: scheduleRes
+            });
+
+            if (petRes.success) setPet(petRes.pet);
+            
+            if (dietRes.diets) {
+                console.log('🍽️ Frontend: Setting diet data:', dietRes.diets);
+                
+                // Merge schedule data with diet data
+                let dietWithSchedules = dietRes.diets;
+                if (scheduleRes && scheduleRes.schedules && !scheduleRes.error) {
+                    console.log('📅 Frontend: Merging schedule data with diet data');
+                    console.log('📅 Frontend: Schedule data:', scheduleRes.schedules);
+                    dietWithSchedules = dietRes.diets.map(diet => {
+                        const schedule = scheduleRes.schedules.find(s => s.dietid === diet.dietid);
+                        if (schedule) {
+                            console.log(`🔗 Frontend: Found schedule for diet ${diet.dietid}:`, schedule);
+                            return { ...diet, ...schedule };
+                        }
+                        console.log(`❌ Frontend: No schedule found for diet ${diet.dietid}`);
+                        return diet;
+                    });
+                } else {
+                    console.log('❌ Frontend: No schedule data available:', scheduleRes);
+                }
+                
+                setDiet(dietWithSchedules);
+                console.log('🍽️ Frontend: Final diet data with schedules:', dietWithSchedules);
+            }
+            
+            if (activityRes.activities) {
+                console.log('🏃 Frontend: Setting activity data:', activityRes.activities);
+                
+                // Merge schedule data with activity data
+                let activitiesWithSchedules = activityRes.activities;
+                if (scheduleRes && scheduleRes.schedules && !scheduleRes.error) {
+                    console.log('📅 Frontend: Merging schedule data with activity data');
+                    console.log('📅 Frontend: Schedule data:', scheduleRes.schedules);
+                    activitiesWithSchedules = activityRes.activities.map(activity => {
+                        const schedule = scheduleRes.schedules.find(s => s.activityid === activity.activityid);
+                        if (schedule) {
+                            console.log(`🔗 Frontend: Found schedule for activity ${activity.activityid}:`, schedule);
+                            return { ...activity, ...schedule };
+                        }
+                        console.log(`❌ Frontend: No schedule found for activity ${activity.activityid}`);
+                        return activity;
+                    });
+                } else {
+                    console.log('❌ Frontend: No schedule data available:', scheduleRes);
+                }
+                
+                setActivities(activitiesWithSchedules);
+                console.log('🏃 Frontend: Final activity data with schedules:', activitiesWithSchedules);
+            }
+            setLoading(false);
+        } catch (error) {
+            console.error('❌ Frontend: Error in fetchData:', error);
+            setLoading(false);
+        }
     };
 
     useEffect(() => {
@@ -2723,12 +3168,90 @@ const PetDetailPage = ({ petId, navigate, goBack }) => {
 
     // --- Diet Handlers ---
     const handleSaveDiet = async (formData) => {
-        if (editingDiet) {
-            await api.diet.update(petId, editingDiet.id, formData);
-        } else {
-            await api.diet.add(petId, formData);
+        console.log('🍽️ Frontend: Saving diet with data:', formData);
+        console.log('🍽️ Frontend: Pet ID:', petId);
+        console.log('🍽️ Frontend: Editing diet:', editingDiet);
+        
+        try {
+            // Separate diet data from schedule data
+            const dietData = {
+                name: formData.name,
+                amount: formData.amount,
+                description: formData.description
+            };
+            
+            const scheduleData = {
+                startdate: formData.startdate,
+                repeat_option: formData.repeat_option,
+                hour: parseInt(formData.hour),
+                minute: parseInt(formData.minute)
+            };
+
+            let dietResult;
+            if (editingDiet) {
+                console.log('🍽️ Frontend: Updating existing diet');
+                dietResult = await api.diet.update(editingDiet.dietid, dietData);
+                
+                // Update existing schedule if it exists
+                if (editingDiet.petscheduleid) {
+                    console.log('🍽️ Frontend: Updating existing diet schedule:', {
+                        ...scheduleData,
+                        dietid: editingDiet.dietid
+                    });
+                    const scheduleResult = await api.petSchedule.update(editingDiet.petscheduleid, {
+                        ...scheduleData,
+                        dietid: editingDiet.dietid
+                    });
+                    console.log('🍽️ Frontend: Schedule update result:', scheduleResult);
+                } else {
+                    // Create new schedule for existing diet
+                    console.log('🍽️ Frontend: Creating schedule for existing diet:', {
+                        ...scheduleData,
+                        dietid: editingDiet.dietid
+                    });
+                    try {
+                        const scheduleResult = await api.petSchedule.add({
+                            ...scheduleData,
+                            dietid: editingDiet.dietid
+                        });
+                        console.log('🍽️ Frontend: Schedule creation result:', scheduleResult);
+                    } catch (scheduleError) {
+                        console.error('❌ Frontend: Error creating schedule for existing diet:', scheduleError);
+                    }
+                }
+            } else {
+                console.log('🍽️ Frontend: Creating new diet');
+                dietResult = await api.diet.add(petId, dietData);
+                console.log('🍽️ Frontend: Diet creation result:', dietResult);
+                
+                // Create schedule for new diet
+                if (dietResult.success && dietResult.diet) {
+                    console.log('🍽️ Frontend: Diet result check - success:', dietResult.success, 'diet:', dietResult.diet);
+                    console.log('🍽️ Frontend: Creating schedule for new diet:', {
+                        ...scheduleData,
+                        dietid: dietResult.diet.dietid
+                    });
+                    try {
+                        const scheduleResult = await api.petSchedule.add({
+                            ...scheduleData,
+                            dietid: dietResult.diet.dietid
+                        });
+                        console.log('🍽️ Frontend: Schedule creation result:', scheduleResult);
+                    } catch (scheduleError) {
+                        console.error('❌ Frontend: Error creating schedule for diet:', scheduleError);
+                    }
+                } else {
+                    console.log('❌ Frontend: Diet creation condition failed - success:', dietResult.success, 'diet:', dietResult.diet);
+                }
+            }
+            console.log('🍽️ Frontend: Diet and schedule saved successfully, fetching updated data');
+            fetchData();
+            setIsDietModalOpen(false);
+            setEditingDiet(null);
+        } catch (error) {
+            console.error('❌ Frontend: Error saving diet:', error);
+            throw error; // Re-throw to show in form
         }
-        fetchData();
     };
 
     const openDietModal = (item = null) => {
@@ -2737,20 +3260,120 @@ const PetDetailPage = ({ petId, navigate, goBack }) => {
     };
 
     const handleDeleteDiet = async (dietId) => {
+        // Prevent multiple deletions of the same item
+        if (deletingItems.has(`diet-${dietId}`)) {
+            console.log('🛑 Diet deletion already in progress for ID:', dietId);
+            return;
+        }
+
         if (window.confirm("Are you sure you want to delete this diet item?")) {
-            await api.diet.delete(petId, dietId);
-            fetchData();
+            // Add to deleting set
+            setDeletingItems(prev => new Set(prev).add(`diet-${dietId}`));
+            
+            try {
+                console.log('🗑️ Deleting diet with ID:', dietId);
+                await api.diet.delete(dietId);
+                console.log('✅ Diet deleted successfully');
+                fetchData();
+            } catch (error) {
+                console.error('❌ Error deleting diet:', error);
+                // You could show an error toast here
+            } finally {
+                // Remove from deleting set
+                setDeletingItems(prev => {
+                    const newSet = new Set(prev);
+                    newSet.delete(`diet-${dietId}`);
+                    return newSet;
+                });
+            }
         }
     };
 
     // --- Activity Handlers ---
     const handleSaveActivity = async (formData) => {
-        if (editingActivity) {
-            await api.activity.update(petId, editingActivity.id, formData);
-        } else {
-            await api.activity.add(petId, formData);
+        console.log('🏃 Frontend: Saving activity with data:', formData);
+        console.log('🏃 Frontend: Pet ID:', petId);
+        console.log('🏃 Frontend: Editing activity:', editingActivity);
+        
+        try {
+            // Separate activity data from schedule data
+            const activityData = {
+                name: formData.name,
+                description: formData.description
+            };
+            
+            const scheduleData = {
+                startdate: formData.startdate,
+                repeat_option: formData.repeat_option,
+                hour: parseInt(formData.hour),
+                minute: parseInt(formData.minute)
+            };
+
+            let activityResult;
+            if (editingActivity) {
+                console.log('🏃 Frontend: Updating existing activity');
+                activityResult = await api.activity.update(editingActivity.activityid, activityData);
+                
+                // Update existing schedule if it exists
+                if (editingActivity.petscheduleid) {
+                    console.log('🏃 Frontend: Updating existing activity schedule:', {
+                        ...scheduleData,
+                        activityid: editingActivity.activityid
+                    });
+                    const scheduleResult = await api.petSchedule.update(editingActivity.petscheduleid, {
+                        ...scheduleData,
+                        activityid: editingActivity.activityid
+                    });
+                    console.log('🏃 Frontend: Schedule update result:', scheduleResult);
+                } else {
+                    // Create new schedule for existing activity
+                    console.log('🏃 Frontend: Creating schedule for existing activity:', {
+                        ...scheduleData,
+                        activityid: editingActivity.activityid
+                    });
+                    try {
+                        const scheduleResult = await api.petSchedule.add({
+                            ...scheduleData,
+                            activityid: editingActivity.activityid
+                        });
+                        console.log('🏃 Frontend: Schedule creation result:', scheduleResult);
+                    } catch (scheduleError) {
+                        console.error('❌ Frontend: Error creating schedule for existing activity:', scheduleError);
+                    }
+                }
+            } else {
+                console.log('🏃 Frontend: Creating new activity');
+                activityResult = await api.activity.add(petId, activityData);
+                console.log('🏃 Frontend: Activity creation result:', activityResult);
+                
+                // Create schedule for new activity
+                if (activityResult.success && activityResult.activity) {
+                    console.log('🏃 Frontend: Activity result check - success:', activityResult.success, 'activity:', activityResult.activity);
+                    console.log('🏃 Frontend: Creating schedule for new activity:', {
+                        ...scheduleData,
+                        activityid: activityResult.activity.activityid
+                    });
+                    try {
+                        const scheduleResult = await api.petSchedule.add({
+                            ...scheduleData,
+                            activityid: activityResult.activity.activityid
+                        });
+                        console.log('🏃 Frontend: Schedule creation result:', scheduleResult);
+                    } catch (scheduleError) {
+                        console.error('❌ Frontend: Error creating schedule for activity:', scheduleError);
+                    }
+                } else {
+                    console.log('❌ Frontend: Activity creation condition failed - success:', activityResult.success, 'activity:', activityResult.activity);
+                }
+            }
+            console.log('🏃 Frontend: Activity and schedule saved successfully, fetching updated data');
+            fetchData();
+            setIsActivityModalOpen(false);
+            setEditingActivity(null);
+        } catch (error) {
+            console.error('❌ Frontend: Error saving activity:', error);
+            throw error; // Re-throw to show in form
         }
-        fetchData();
     };
 
     const openActivityModal = (item = null) => {
@@ -2759,9 +3382,32 @@ const PetDetailPage = ({ petId, navigate, goBack }) => {
     };
 
     const handleDeleteActivity = async (activityId) => {
+        // Prevent multiple deletions of the same item
+        if (deletingItems.has(`activity-${activityId}`)) {
+            console.log('🛑 Activity deletion already in progress for ID:', activityId);
+            return;
+        }
+
         if (window.confirm("Are you sure you want to delete this activity?")) {
-            await api.activity.delete(petId, activityId);
-            fetchData();
+            // Add to deleting set
+            setDeletingItems(prev => new Set(prev).add(`activity-${activityId}`));
+            
+            try {
+                console.log('🗑️ Deleting activity with ID:', activityId);
+                await api.activity.delete(activityId);
+                console.log('✅ Activity deleted successfully');
+                fetchData();
+            } catch (error) {
+                console.error('❌ Error deleting activity:', error);
+                // You could show an error toast here
+            } finally {
+                // Remove from deleting set
+                setDeletingItems(prev => {
+                    const newSet = new Set(prev);
+                    newSet.delete(`activity-${activityId}`);
+                    return newSet;
+                });
+            }
         }
     };
 
@@ -2787,15 +3433,14 @@ const PetDetailPage = ({ petId, navigate, goBack }) => {
                         );
                     })()}
                     <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{pet.name}</h1>
-                    <p className="text-md text-gray-500 dark:text-gray-400">{pet.breed}</p>
                 </div>
                 <div className="w-full md:w-2/3">
                     <Card>
                         <h2 className="text-xl font-bold mb-4">Pet Information</h2>
                         <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div><strong className="block text-gray-500">Breed</strong> {pet.breed}</div>
                             <div><strong className="block text-gray-500">Age</strong> {pet.age} years</div>
-                            <div><strong className="block text-gray-500">Birthday</strong> {new Date(pet.dob).toLocaleDateString()}</div>
-                            <div><strong className="block text-gray-500">Weight</strong> {pet.weight}</div>
+                            <div className="col-span-2"><strong className="block text-gray-500">Birthday</strong> {new Date(pet.dob).toLocaleDateString()}</div>
                             <div className="col-span-2"><strong className="block text-gray-500">Description</strong> {pet.description}</div>
                         </div>
                     </Card>
@@ -2805,43 +3450,109 @@ const PetDetailPage = ({ petId, navigate, goBack }) => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
                 <Card>
                     <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-bold flex items-center gap-2"><Utensils /> Diet Plan</h2>
-                        <Button onClick={() => openDietModal(null)} className="!px-3 !py-1 text-xs">Add Diet</Button>
+                        <h2 className="text-xl font-bold flex items-center gap-2"><Utensils /> Diet Schedule</h2>
+                        <Button onClick={() => openDietModal(null)} className="!px-3 !py-1 text-xs">Schedule Diet</Button>
                     </div>
                     <div className="space-y-3">
                         {diet.length > 0 ? diet.map(d => (
-                            <div key={d.id} className="group p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg flex justify-between items-center">
-                                <div>
-                                    <p className="font-semibold">{d.food_name}</p>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">{d.quantity} - {d.hour}:{d.minute} ({d.repeat_option})</p>
-                                </div>
-                                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
-                                    <Button variant="secondary" onClick={() => openDietModal(d)} className="!p-2"><Edit size={14}/></Button>
-                                    <Button variant="danger" onClick={() => handleDeleteDiet(d.id)} className="!p-2"><Trash2 size={14}/></Button>
+                            <div key={d.dietid} className="group p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                                <div className="flex justify-between items-start">
+                                    <div className="flex-1">
+                                        <p className="font-semibold">{d.name}</p>
+                                        {d.amount && <p className="text-sm text-gray-600 dark:text-gray-300">Amount: {d.amount}</p>}
+                                        {d.description && <p className="text-sm text-gray-500 dark:text-gray-400 italic">"{d.description}"</p>}
+                                        
+                                        {/* Schedule Information */}
+                                        {d.startdate && (
+                                            <div className="mt-2 text-xs text-blue-600 dark:text-blue-400">
+                                                <div className="flex items-center gap-1">
+                                                    <Clock size={12} />
+                                                    <span>
+                                                        {String(d.hour || 0).padStart(2, '0')}:{String(d.minute || 0).padStart(2, '0')} • {d.repeat_option}
+                                                        {d.repeat_option !== 'never' && ` • Starting ${new Date(d.startdate).toLocaleDateString()}`}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2 ml-4">
+                                        <Button 
+                                            variant="secondary" 
+                                            onClick={() => openDietModal(d)} 
+                                            className="!p-2"
+                                            disabled={deletingItems.has(`diet-${d.dietid}`)}
+                                        >
+                                            <Edit size={14}/>
+                                        </Button>
+                                        <Button 
+                                            variant="danger" 
+                                            onClick={() => handleDeleteDiet(d.dietid)} 
+                                            className="!p-2"
+                                            disabled={deletingItems.has(`diet-${d.dietid}`)}
+                                        >
+                                            {deletingItems.has(`diet-${d.dietid}`) ? (
+                                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                                            ) : (
+                                                <Trash2 size={14}/>
+                                            )}
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
-                        )) : <p className="text-gray-500 dark:text-gray-400">No diet plan set up.</p>}
+                        )) : <p className="text-gray-500 dark:text-gray-400">No diet schedules set up.</p>}
                     </div>
                 </Card>
                 <Card>
                     <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-bold flex items-center gap-2"><Footprints /> Activity Log</h2>
-                        <Button onClick={() => openActivityModal(null)} className="!px-3 !py-1 text-xs">Log Activity</Button>
+                        <h2 className="text-xl font-bold flex items-center gap-2"><Footprints /> Activity Schedule</h2>
+                        <Button onClick={() => openActivityModal(null)} className="!px-3 !py-1 text-xs">Schedule Activity</Button>
                     </div>
                     <div className="space-y-3">
                         {activities.length > 0 ? activities.map(a => (
-                            <div key={a.id} className="group p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg flex justify-between items-center">
-                                <div>
-                                    <p className="font-semibold">{a.activity_name}</p>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">{new Date(a.date).toLocaleDateString()} at {a.time} ({a.duration})</p>
-                                    {a.notes && <p className="text-sm mt-1 italic text-gray-600 dark:text-gray-300">"{a.notes}"</p>}
-                                </div>
-                                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
-                                    <Button variant="secondary" onClick={() => openActivityModal(a)} className="!p-2"><Edit size={14}/></Button>
-                                    <Button variant="danger" onClick={() => handleDeleteActivity(a.id)} className="!p-2"><Trash2 size={14}/></Button>
+                            <div key={a.activityid} className="group p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                                <div className="flex justify-between items-start">
+                                    <div className="flex-1">
+                                        <p className="font-semibold">{a.name}</p>
+                                        {a.description && <p className="text-sm text-gray-500 dark:text-gray-400 italic">"{a.description}"</p>}
+                                        
+                                        {/* Schedule Information */}
+                                        {a.startdate && (
+                                            <div className="mt-2 text-xs text-green-600 dark:text-green-400">
+                                                <div className="flex items-center gap-1">
+                                                    <Clock size={12} />
+                                                    <span>
+                                                        {String(a.hour || 0).padStart(2, '0')}:{String(a.minute || 0).padStart(2, '0')} • {a.repeat_option}
+                                                        {a.repeat_option !== 'never' && ` • Starting ${new Date(a.startdate).toLocaleDateString()}`}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2 ml-4">
+                                        <Button 
+                                            variant="secondary" 
+                                            onClick={() => openActivityModal(a)} 
+                                            className="!p-2"
+                                            disabled={deletingItems.has(`activity-${a.activityid}`)}
+                                        >
+                                            <Edit size={14}/>
+                                        </Button>
+                                        <Button 
+                                            variant="danger" 
+                                            onClick={() => handleDeleteActivity(a.activityid)} 
+                                            className="!p-2"
+                                            disabled={deletingItems.has(`activity-${a.activityid}`)}
+                                        >
+                                            {deletingItems.has(`activity-${a.activityid}`) ? (
+                                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                                            ) : (
+                                                <Trash2 size={14}/>
+                                            )}
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
-                        )) : <p className="text-gray-500 dark:text-gray-400">No activities logged yet.</p>}
+                        )) : <p className="text-gray-500 dark:text-gray-400">No activity schedules set up.</p>}
                     </div>
                 </Card>
             </div>
@@ -2853,7 +3564,7 @@ const PetDetailPage = ({ petId, navigate, goBack }) => {
     );
 };
 
-const DeleteAccountModal = ({ isOpen, onClose, onConfirm }) => {
+const DeleteAccountModal = ({ isOpen, onClose, onConfirm, isDeleting }) => {
     const [confirmText, setConfirmText] = useState("");
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Delete Account">
@@ -2868,11 +3579,20 @@ const DeleteAccountModal = ({ isOpen, onClose, onConfirm }) => {
                     </p>
                 </div>
                 <p>To confirm, please type "DELETE" in the box below.</p>
-                <Input name="confirm" value={confirmText} onChange={(e) => setConfirmText(e.target.value)} />
+                <Input 
+                    name="confirm" 
+                    value={confirmText} 
+                    onChange={(e) => setConfirmText(e.target.value)} 
+                    disabled={isDeleting}
+                />
                 <div className="flex justify-end gap-2">
-                    <Button variant="secondary" onClick={onClose}>Cancel</Button>
-                    <Button variant="danger" onClick={onConfirm} disabled={confirmText !== 'DELETE'}>
-                        I understand, delete my account
+                    <Button variant="secondary" onClick={onClose} disabled={isDeleting}>Cancel</Button>
+                    <Button 
+                        variant="danger" 
+                        onClick={onConfirm} 
+                        disabled={confirmText !== 'DELETE' || isDeleting}
+                    >
+                        {isDeleting ? 'Deleting Account...' : 'I understand, delete my account'}
                     </Button>
                 </div>
             </div>
@@ -3318,6 +4038,8 @@ const ProviderSchedulePage = ({ navigate, setSelectedBookingId }) => {
     }, []);
 
     const handleItemClick = (item) => {
+        console.log('🔍 Frontend: Item clicked:', item);
+        console.log('🔍 Frontend: Current selected item:', selectedItem);
         setSelectedItem(item);
     };
 
@@ -3440,6 +4162,7 @@ const MyServicesPage = ({}) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedService, setSelectedService] = useState(null);
     const [activeTab, setActiveTab] = useState('All');
+    const [deletingServices, setDeletingServices] = useState(new Set());
 
     const fetchServices = async () => {
         setLoading(true);
@@ -3486,6 +4209,12 @@ const MyServicesPage = ({}) => {
         console.log('Attempting to delete service ID:', serviceId);
         console.log('Current services in state:', services.map(s => ({ id: s.serviceid, name: s.name })));
         
+        // Prevent multiple delete requests for the same service
+        if (deletingServices.has(serviceId)) {
+            console.log('Delete already in progress for service ID:', serviceId);
+            return;
+        }
+        
         // Check if the service exists in our current state
         const serviceExists = services.find(s => s.serviceid === serviceId);
         if (!serviceExists) {
@@ -3496,6 +4225,9 @@ const MyServicesPage = ({}) => {
         
         if(window.confirm(`Are you sure you want to delete "${serviceExists.name}"? This action cannot be undone.`)) {
             try {
+                // Mark service as being deleted
+                setDeletingServices(prev => new Set([...prev, serviceId]));
+                
                 console.log('Making DELETE request for service ID:', serviceId);
                 const result = await api.services.delete(serviceId);
                 console.log('Delete successful:', result);
@@ -3513,6 +4245,13 @@ const MyServicesPage = ({}) => {
                 } else {
                     alert('Failed to delete service: ' + (error.message || error.data?.message || 'Unknown error'));
                 }
+            } finally {
+                // Remove service from deleting set
+                setDeletingServices(prev => {
+                    const next = new Set(prev);
+                    next.delete(serviceId);
+                    return next;
+                });
             }
         }
     };
@@ -3585,7 +4324,13 @@ const MyServicesPage = ({}) => {
                                 <p className="text-lg font-semibold text-blue-600 dark:text-blue-400 flex items-center"><DollarSign size={18} className="mr-1"/>{service.price}</p>
                                 <div className="flex gap-2">
                                     <Button variant="secondary" onClick={() => handleEdit(service)}>Edit</Button>
-                                    <Button variant="danger" onClick={() => handleDelete(service.serviceid)}>Delete</Button>
+                                    <Button 
+                                        variant="danger" 
+                                        onClick={() => handleDelete(service.serviceid)}
+                                        disabled={deletingServices.has(service.serviceid)}
+                                    >
+                                        {deletingServices.has(service.serviceid) ? 'Deleting...' : 'Delete'}
+                                    </Button>
                                 </div>
                             </div>
                         </Card>
@@ -4193,7 +4938,7 @@ const BrowseServicesPage = ({navigate, setSelectedServiceId}) => {
 
 // --- Schedule Page (Formerly My Bookings) ---
 
-const Calendar = ({ scheduleItems, onDateClick, currentDate, setCurrentDate, itemColorClass }) => {
+const Calendar = ({ scheduleItems, onDateClick, currentDate, setCurrentDate, itemColorClass, allowDateClick = false }) => {
     const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
     const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
@@ -4224,22 +4969,101 @@ const Calendar = ({ scheduleItems, onDateClick, currentDate, setCurrentDate, ite
             return date <= endDate;
         };
 
+        const isRecurringMatch = (startDate, today, repeatOption) => {
+            const timeDiff = today.getTime() - startDate.getTime();
+            const daysDiff = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+            
+            switch (repeatOption) {
+                case 'never':
+                case 'none':
+                    return startDate.getTime() === today.getTime();
+                
+                case 'hourly':
+                    // For calendar view, show daily (since we can't show hourly granularity)
+                    return daysDiff >= 0;
+                
+                case 'daily':
+                    return daysDiff >= 0;
+                
+                case 'weekly':
+                    return daysDiff >= 0 && today.getDay() === startDate.getDay();
+                
+                case 'biweekly':
+                    return daysDiff >= 0 && today.getDay() === startDate.getDay() && Math.floor(daysDiff / 7) % 2 === 0;
+                
+                case 'monthly':
+                    if (daysDiff < 0) return false;
+                    
+                    // Check if it's the same day of the month
+                    const monthsDiff = (today.getFullYear() - startDate.getFullYear()) * 12 + 
+                                     (today.getMonth() - startDate.getMonth());
+                    
+                    // Create a date for this month's occurrence
+                    const thisMonthDate = new Date(startDate.getFullYear(), startDate.getMonth() + monthsDiff, startDate.getDate());
+                    
+                    // Handle cases where the day doesn't exist in the current month (e.g., Feb 31st)
+                    if (thisMonthDate.getDate() !== startDate.getDate()) {
+                        // Use the last day of the month instead
+                        thisMonthDate.setDate(0);
+                    }
+                    
+                    return thisMonthDate.getTime() === today.getTime();
+                
+                case 'every 3 months':
+                    if (daysDiff < 0) return false;
+                    
+                    const months3Diff = (today.getFullYear() - startDate.getFullYear()) * 12 + 
+                                       (today.getMonth() - startDate.getMonth());
+                    
+                    if (months3Diff % 3 !== 0) return false;
+                    
+                    const thisQuarterDate = new Date(startDate.getFullYear(), startDate.getMonth() + months3Diff, startDate.getDate());
+                    if (thisQuarterDate.getDate() !== startDate.getDate()) {
+                        thisQuarterDate.setDate(0);
+                    }
+                    
+                    return thisQuarterDate.getTime() === today.getTime();
+                
+                case 'every 6 months':
+                    if (daysDiff < 0) return false;
+                    
+                    const months6Diff = (today.getFullYear() - startDate.getFullYear()) * 12 + 
+                                       (today.getMonth() - startDate.getMonth());
+                    
+                    if (months6Diff % 6 !== 0) return false;
+                    
+                    const thisSemiAnnualDate = new Date(startDate.getFullYear(), startDate.getMonth() + months6Diff, startDate.getDate());
+                    if (thisSemiAnnualDate.getDate() !== startDate.getDate()) {
+                        thisSemiAnnualDate.setDate(0);
+                    }
+                    
+                    return thisSemiAnnualDate.getTime() === today.getTime();
+                
+                case 'yearly':
+                    if (daysDiff < 0) return false;
+                    
+                    // Check if it's the same month and day
+                    return today.getMonth() === startDate.getMonth() && 
+                           today.getDate() === startDate.getDate();
+                
+                default:
+                    return false;
+            }
+        };
+
         items.forEach(item => {
             const startDate = new Date(item.startdate);
             startDate.setHours(0,0,0,0);
 
-            if (item.repeat_option === 'none') {
-                if (startDate.getTime() === today.getTime()) {
-                    events.push(item);
-                }
-            } else if (item.repeat_option === 'daily') {
-                if (today >= startDate && checkEndDate(item, today)) {
-                    events.push(item);
-                }
-            } else if (item.repeat_option === 'weekly') {
-                if (today >= startDate && today.getDay() === startDate.getDay() && checkEndDate(item, today)) {
-                    events.push(item);
-                }
+            if (today >= startDate && checkEndDate(item, today) && 
+                isRecurringMatch(startDate, today, item.repeat_option)) {
+                console.log(`📅 Event matched for ${today.toDateString()}:`, {
+                    title: item.title,
+                    startDate: startDate.toDateString(),
+                    repeatOption: item.repeat_option,
+                    daysDiff: Math.floor((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
+                });
+                events.push(item);
             }
         });
         return events;
@@ -4263,11 +5087,22 @@ const Calendar = ({ scheduleItems, onDateClick, currentDate, setCurrentDate, ite
                     const isCurrentMonth = d.getMonth() === currentDate.getMonth();
 
                     return (
-                        <div key={i} className={`border border-gray-200 dark:border-gray-700 rounded-md p-1.5 flex flex-col ${isCurrentMonth ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-800/50'}`}>
+                        <div 
+                            key={i} 
+                            className={`border border-gray-200 dark:border-gray-700 rounded-md p-1.5 flex flex-col ${isCurrentMonth ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-800/50'} ${allowDateClick ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700' : ''}`}
+                            onClick={allowDateClick ? () => onDateClick({ date: d }) : undefined}
+                        >
                             <span className={`font-medium mb-1 ${isToday ? 'bg-blue-600 text-white rounded-full w-7 h-7 flex items-center justify-center' : 'text-gray-900 dark:text-white'}`}>{d.getDate()}</span>
                             <div className="flex-1 overflow-y-auto text-xs space-y-1">
                                 {dayItems.map(item => (
-                                    <div key={item.id} onClick={() => onDateClick(item)} className={`p-1.5 rounded-md text-white cursor-pointer text-xs ${itemColorClass(item)}`}>
+                                    <div 
+                                        key={item.id} 
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onDateClick(item);
+                                        }} 
+                                        className={`p-1.5 rounded-md text-white cursor-pointer text-xs ${itemColorClass(item)}`}
+                                    >
                                         <p className="font-bold truncate"><span className="font-mono">{item.time}</span> - {item.title}</p>
                                         <p className="truncate opacity-80">{item.petName || (item.pets && item.pets.map(p => p.name).join(', '))}</p>
                                     </div>
@@ -4277,6 +5112,226 @@ const Calendar = ({ scheduleItems, onDateClick, currentDate, setCurrentDate, ite
                     );
                 })}
             </div>
+        </Card>
+    );
+};
+
+// Personal Schedule Detail Panel for pet-specific schedule view
+const PersonalScheduleDetailPanel = ({ clickedDate, personalSchedule, pets, loading }) => {
+    const [selectedPetForDetails, setSelectedPetForDetails] = useState(null);
+    
+    if (!clickedDate) {
+        return (
+            <Card className="w-full md:w-1/3 lg:w-96 flex flex-col">
+                <div className="flex-1 flex items-center justify-center text-center text-gray-500 dark:text-gray-400">
+                    <p>Click on a calendar date to view pet schedules.</p>
+                </div>
+            </Card>
+        );
+    }
+
+    // Show loading if schedule data is still being fetched
+    if (loading?.personal) {
+        return (
+            <Card className="w-full md:w-1/3 lg:w-96 flex flex-col">
+                <div className="flex-1 flex items-center justify-center text-center text-gray-500 dark:text-gray-400">
+                    <Spinner />
+                </div>
+            </Card>
+        );
+    }
+
+    // Find all schedule items for the clicked date (including recurring events)
+    const dateString = clickedDate.toISOString().split('T')[0];
+    const clickedDateObj = new Date(clickedDate);
+    clickedDateObj.setHours(0,0,0,0);
+    
+    const isRecurringMatch = (startDate, targetDate, repeatOption) => {
+        const timeDiff = targetDate.getTime() - startDate.getTime();
+        const daysDiff = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+        
+        switch (repeatOption) {
+            case 'never':
+            case 'none':
+                return startDate.getTime() === targetDate.getTime();
+            
+            case 'hourly':
+            case 'daily':
+                return daysDiff >= 0;
+            
+            case 'weekly':
+                return daysDiff >= 0 && targetDate.getDay() === startDate.getDay();
+            
+            case 'biweekly':
+                return daysDiff >= 0 && targetDate.getDay() === startDate.getDay() && Math.floor(daysDiff / 7) % 2 === 0;
+            
+            case 'monthly':
+                if (daysDiff < 0) return false;
+                
+                const monthsDiff = (targetDate.getFullYear() - startDate.getFullYear()) * 12 + 
+                                 (targetDate.getMonth() - startDate.getMonth());
+                
+                const thisMonthDate = new Date(startDate.getFullYear(), startDate.getMonth() + monthsDiff, startDate.getDate());
+                
+                if (thisMonthDate.getDate() !== startDate.getDate()) {
+                    thisMonthDate.setDate(0);
+                }
+                
+                return thisMonthDate.getTime() === targetDate.getTime();
+            
+            case 'every 3 months':
+                if (daysDiff < 0) return false;
+                
+                const months3Diff = (targetDate.getFullYear() - startDate.getFullYear()) * 12 + 
+                                   (targetDate.getMonth() - startDate.getMonth());
+                
+                if (months3Diff % 3 !== 0) return false;
+                
+                const thisQuarterDate = new Date(startDate.getFullYear(), startDate.getMonth() + months3Diff, startDate.getDate());
+                if (thisQuarterDate.getDate() !== startDate.getDate()) {
+                    thisQuarterDate.setDate(0);
+                }
+                
+                return thisQuarterDate.getTime() === targetDate.getTime();
+            
+            case 'every 6 months':
+                if (daysDiff < 0) return false;
+                
+                const months6Diff = (targetDate.getFullYear() - startDate.getFullYear()) * 12 + 
+                                   (targetDate.getMonth() - startDate.getMonth());
+                
+                if (months6Diff % 6 !== 0) return false;
+                
+                const thisSemiAnnualDate = new Date(startDate.getFullYear(), startDate.getMonth() + months6Diff, startDate.getDate());
+                if (thisSemiAnnualDate.getDate() !== startDate.getDate()) {
+                    thisSemiAnnualDate.setDate(0);
+                }
+                
+                return thisSemiAnnualDate.getTime() === targetDate.getTime();
+            
+            case 'yearly':
+                if (daysDiff < 0) return false;
+                
+                return targetDate.getMonth() === startDate.getMonth() && 
+                       targetDate.getDate() === startDate.getDate();
+            
+            default:
+                return false;
+        }
+    };
+
+    const checkEndDate = (item, date) => {
+        if (!item.enddate) return true;
+        const endDate = new Date(item.enddate);
+        endDate.setHours(23, 59, 59, 999);
+        return date <= endDate;
+    };
+    
+    const itemsForDate = personalSchedule.filter(item => {
+        const itemStartDate = new Date(item.startdate);
+        itemStartDate.setHours(0,0,0,0);
+        
+        return clickedDateObj >= itemStartDate && 
+               checkEndDate(item, clickedDateObj) && 
+               isRecurringMatch(itemStartDate, clickedDateObj, item.repeat_option);
+    });
+
+    // Group items by pet - now we can be sure pets data is available
+    const petGroups = itemsForDate.reduce((groups, item) => {
+        const petId = item.petId;
+        if (!groups[petId]) {
+            const pet = pets.find(p => p.petid === petId);
+            if (pet) {
+                groups[petId] = {
+                    pet: pet,
+                    items: []
+                };
+            } else {
+                // Only create fallback if pet really doesn't exist in the database
+                console.warn(`Schedule item references pet ID ${petId} that doesn't exist in user's pets`);
+                return groups; // Skip this item since the pet doesn't belong to this user
+            }
+        }
+        if (groups[petId]) {
+            groups[petId].items.push(item);
+        }
+        return groups;
+    }, {});
+
+    const petsWithSchedules = Object.values(petGroups);
+
+    if (selectedPetForDetails) {
+        const petGroup = petGroups[selectedPetForDetails.petid];
+        if (petGroup) {
+            return (
+                <Card className="w-full md:w-1/3 lg:w-96 flex flex-col">
+                    <div className="flex items-center gap-3 mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+                        <button
+                            onClick={() => setSelectedPetForDetails(null)}
+                            className="p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                        >
+                            <ChevronLeft size={20} />
+                        </button>
+                        <div>
+                            <h2 className="text-lg font-bold">{petGroup.pet.name}</h2>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{clickedDate.toLocaleDateString()}</p>
+                        </div>
+                    </div>
+                    
+                    <div className="flex-1 space-y-4">
+                        {petGroup.items.map((item, index) => (
+                            <div key={index} className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                                <div className="flex items-center gap-2 mb-2">
+                                    {item.type === 'diet' ? <Utensils size={16} className="text-purple-500" /> : <Footprints size={16} className="text-pink-500" />}
+                                    <h3 className="font-semibold">{item.title}</h3>
+                                </div>
+                                <div className="text-sm space-y-1">
+                                    <p><strong>Time:</strong> {item.time}</p>
+                                    <p><strong>Repeat:</strong> {item.repeat_option}</p>
+                                    {item.type === 'diet' && item.quantity && (
+                                        <p><strong>Quantity:</strong> {item.quantity}</p>
+                                    )}
+                                    {item.description && (
+                                        <p><strong>Notes:</strong> {item.description}</p>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </Card>
+            );
+        }
+    }
+
+    return (
+        <Card className="w-full md:w-1/3 lg:w-96 flex flex-col">
+            <h2 className="text-xl font-bold mb-4">Schedules for {clickedDate.toLocaleDateString()}</h2>
+            
+            {petsWithSchedules.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center text-center text-gray-500 dark:text-gray-400">
+                    <p>No schedules found for this date.</p>
+                </div>
+            ) : (
+                <div className="flex-1 space-y-3">
+                    {petsWithSchedules.map(({ pet, items }) => (
+                        <button
+                            key={pet.petid || `missing-${items[0]?.petId}`}
+                            onClick={() => setSelectedPetForDetails(pet)}
+                            className="w-full p-3 text-left bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors border border-transparent hover:border-gray-200 dark:hover:border-gray-600"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="flex-1">
+                                    <h3 className="font-semibold text-gray-900 dark:text-white">{pet.name}</h3>
+                                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                                        {items.length} schedule{items.length !== 1 ? 's' : ''} ({items.filter(i => i.type === 'diet').length} diet, {items.filter(i => i.type === 'activity').length} activity)
+                                    </p>
+                                </div>
+                                <ChevronRight size={16} className="text-gray-400" />
+                            </div>
+                        </button>
+                    ))}
+                </div>
+            )}
         </Card>
     );
 };
@@ -4350,6 +5405,13 @@ const EventDetailPanel = ({ item, navigate, setSelectedBookingId }) => {
                     <h3 className="font-bold">{item.title}</h3>
                     {isBooking && <p className="text-sm text-gray-500 dark:text-gray-400">{item.provider_name}</p>}
                     <p className="text-sm text-gray-500 dark:text-gray-400">For: {item.petName || (item.pets && item.pets.map(p => p.name).join(', '))}</p>
+                    {(isDiet || isActivity) && (
+                        <>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Time: {item.time}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Date: {new Date(item.startdate).toLocaleDateString()}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Repeat: {item.repeat_option}</p>
+                        </>
+                    )}
                     {isBooking && (
 
                         <Button variant="secondary" className="!text-xs !py-1 !px-2 mt-2" onClick={handleViewBookingDetails}>
@@ -4744,6 +5806,7 @@ const NotificationsPage = ({ navigate, setSelectedBookingId, setSelectedServiceI
     const { user } = useAuth();
     const [notifications, setNotifications] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [deletingNotifications, setDeletingNotifications] = useState(new Set());
 
     const fetchNotifications = async () => {
         setLoading(true);
@@ -4812,8 +5875,29 @@ const NotificationsPage = ({ navigate, setSelectedBookingId, setSelectedServiceI
     }
 
     const handleDelete = async (id) => {
-        await api.notifications.delete(id);
-        fetchNotifications();
+        // Prevent multiple delete requests for the same notification
+        if (deletingNotifications.has(id)) {
+            console.log('Delete already in progress for notification ID:', id);
+            return;
+        }
+        
+        try {
+            // Mark notification as being deleted
+            setDeletingNotifications(prev => new Set([...prev, id]));
+            
+            await api.notifications.delete(id);
+            fetchNotifications();
+        } catch (error) {
+            console.error('Delete notification error:', error);
+            alert('Failed to delete notification: ' + (error.message || 'Unknown error'));
+        } finally {
+            // Remove notification from deleting set
+            setDeletingNotifications(prev => {
+                const next = new Set(prev);
+                next.delete(id);
+                return next;
+            });
+        }
     };
 
     return (
@@ -4839,7 +5923,14 @@ const NotificationsPage = ({ navigate, setSelectedBookingId, setSelectedServiceI
                                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{new Date(notif.created_at).toLocaleString()}</p>
                                 </div>
                                 <div className="opacity-0 group-hover:opacity-100 flex gap-2 transition-opacity">
-                                    <Button onClick={(e) => { e.stopPropagation(); handleDelete(notif.notiid); }} variant="danger" className="!p-2"><Trash2 size={16}/></Button>
+                                    <Button 
+                                        onClick={(e) => { e.stopPropagation(); handleDelete(notif.notiid); }} 
+                                        variant="danger" 
+                                        className="!p-2"
+                                        disabled={deletingNotifications.has(notif.notiid)}
+                                    >
+                                        {deletingNotifications.has(notif.notiid) ? <Spinner size="small" /> : <Trash2 size={16}/>}
+                                    </Button>
                                 </div>
                             </div>
                         ))
@@ -4859,7 +5950,10 @@ const SchedulePage = ({ navigate, setSelectedBookingId }) => {
     const [chatUpdates, setChatUpdates] = useState([]);
     const [loading, setLoading] = useState({ bookings: true, personal: true, chat: false });
     const [selectedItem, setSelectedItem] = useState(null);
+    const [clickedDate, setClickedDate] = useState(null); // For personal schedule date clicking
     const [currentDate, setCurrentDate] = useState(new Date());
+    // Extract pets from schedule data instead of separate API call
+    const [pets, setPets] = useState([]);
 
     useEffect(() => {
         const fetchBookings = async () => {
@@ -4883,8 +5977,51 @@ const SchedulePage = ({ navigate, setSelectedBookingId }) => {
         const fetchPersonalSchedule = async () => {
             setLoading(prev => ({...prev, personal: true }));
             const res = await api.petSchedule.get();
-            if (res.success) {
-                setPersonalSchedule(res.schedule);
+            console.log('Personal schedule API response:', res);
+            if (res.success && res.schedules) {
+                // Transform the schedule data to match Calendar component expectations
+                const formattedSchedule = res.schedules.map(schedule => {
+                    const isDiet = schedule.dietid != null;
+                    const isActivity = schedule.activityid != null;
+                    
+                    // Format time as HH:MM
+                    const timeString = `${schedule.hour.toString().padStart(2, '0')}:${schedule.minute.toString().padStart(2, '0')}`;
+                    
+                    return {
+                        id: `schedule-${schedule.petscheduleid}`,
+                        type: isDiet ? 'diet' : 'activity',
+                        title: isDiet ? schedule.diet_name : schedule.activity_name,
+                        startdate: schedule.startdate,
+                        time: timeString,
+                        petName: schedule.pet_name,
+                        repeat_option: schedule.repeat_option,
+                        // Include original data for detail panel
+                        dietid: schedule.dietid,
+                        activityid: schedule.activityid,
+                        quantity: schedule.diet_amount, // For diet items
+                        description: isDiet ? schedule.diet_description : schedule.activity_description, // For both types
+                        duration: !isDiet ? 'Not specified' : undefined, // For activities (placeholder since we don't have duration in schedule)
+                        notes: !isDiet ? schedule.activity_description : undefined, // For activities
+                        petId: schedule.petid,
+                        scheduleId: schedule.petscheduleid
+                    };
+                });
+                console.log('Formatted personal schedule:', formattedSchedule);
+                setPersonalSchedule(formattedSchedule);
+                
+                // Extract unique pets from schedule data
+                const uniquePets = {};
+                res.schedules.forEach(schedule => {
+                    if (schedule.petid && schedule.pet_name && !uniquePets[schedule.petid]) {
+                        uniquePets[schedule.petid] = {
+                            petid: schedule.petid,
+                            name: schedule.pet_name,
+                            breed: 'Unknown', // Not available in schedule data
+                            picture: null // Not needed for schedule display
+                        };
+                    }
+                });
+                setPets(Object.values(uniquePets));
             }
             setLoading(prev => ({...prev, personal: false }));
         }
@@ -4908,7 +6045,22 @@ const SchedulePage = ({ navigate, setSelectedBookingId }) => {
     }, [selectedItem]);
 
     const handleItemClick = (item) => {
-        setSelectedItem(item);
+        if (activeTab === 'services') {
+            // For service bookings, show the item details
+            setSelectedItem(item);
+            setClickedDate(null);
+        } else if (activeTab === 'personal') {
+            // For personal schedule, when clicking on any schedule item or date, show all pets for that date
+            if (item && item.date) {
+                // Clicked on a date cell (no specific event)
+                setClickedDate(item.date);
+                setSelectedItem(null);
+            } else if (item && item.startdate) {
+                // Clicked on a specific event
+                setClickedDate(new Date(item.startdate));
+                setSelectedItem(null);
+            }
+        }
     };
 
     const getBookingColor = (item) => {
@@ -4932,10 +6084,10 @@ const SchedulePage = ({ navigate, setSelectedBookingId }) => {
                 <div className="flex-1 flex flex-col">
                     <div className="border-b border-gray-200 dark:border-gray-700 mb-4">
                         <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-                            <button onClick={() => {setActiveTab('services'); setSelectedItem(null);}} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'services' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                            <button onClick={() => {setActiveTab('services'); setSelectedItem(null); setClickedDate(null);}} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'services' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
                                 Service Bookings
                             </button>
-                            <button onClick={() => {setActiveTab('personal'); setSelectedItem(null);}} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'personal' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                            <button onClick={() => {setActiveTab('personal'); setSelectedItem(null); setClickedDate(null);}} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'personal' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
                                 Personal Pet Schedule
                             </button>
                         </nav>
@@ -4962,18 +6114,29 @@ const SchedulePage = ({ navigate, setSelectedBookingId }) => {
                                     currentDate={currentDate}
                                     setCurrentDate={setCurrentDate}
                                     itemColorClass={getPersonalScheduleColor}
+                                    allowDateClick={true}
                                 />
                         )}
                     </div>
                 </div>
-                <EventDetailPanel
-                    item={selectedItem}
-                    chatUpdates={chatUpdates}
-                    setChatUpdates={setChatUpdates}
-                    loading={loading.chat}
-                    navigate={navigate}
-                    setSelectedBookingId={setSelectedBookingId}
-                />
+                {activeTab === 'services' ? (
+                    <EventDetailPanel
+                        key={selectedItem?.id || 'no-selection'}
+                        item={selectedItem}
+                        chatUpdates={chatUpdates}
+                        setChatUpdates={setChatUpdates}
+                        loading={loading.chat}
+                        navigate={navigate}
+                        setSelectedBookingId={setSelectedBookingId}
+                    />
+                ) : (
+                    <PersonalScheduleDetailPanel
+                        clickedDate={clickedDate}
+                        personalSchedule={personalSchedule}
+                        pets={pets}
+                        loading={loading}
+                    />
+                )}
             </div>
         </div>
     );
@@ -5224,7 +6387,7 @@ const ManagerBookingDetailPage = ({ bookingId, goBack }) => {
 
 // --- Service Detail Page ---
 
-const ReviewCard = ({ review, isOwnReview, onEdit, onDelete }) => (
+const ReviewCard = ({ review, isOwnReview, onEdit, onDelete, isDeleting }) => (
     <div className="flex gap-4 border-b border-gray-200 dark:border-gray-700 py-4 group">
         <User className="h-10 w-10 rounded-full bg-gray-200 dark:bg-gray-700 p-2 text-gray-600 dark:text-gray-300"/>
         <div className="flex-1">
@@ -5240,7 +6403,14 @@ const ReviewCard = ({ review, isOwnReview, onEdit, onDelete }) => (
         {isOwnReview && (
             <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
                 <Button variant="secondary" onClick={() => onEdit(review)} className="!p-2"><Edit size={14}/></Button>
-                <Button variant="danger" onClick={() => onDelete(review.id)} className="!p-2"><Trash2 size={14}/></Button>
+                <Button 
+                    variant="danger" 
+                    onClick={() => onDelete(review.id)} 
+                    className="!p-2"
+                    disabled={isDeleting}
+                >
+                    {isDeleting ? <Spinner size="small" /> : <Trash2 size={14}/>}
+                </Button>
             </div>
         )}
     </div>
@@ -5325,6 +6495,7 @@ const ServiceDetailPage = ({ serviceId, navigate, goBack, setSelectedProviderId 
     const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
     const [userPets, setUserPets] = useState([]);
     const [reviewModal, setReviewModal] = useState({ isOpen: false, review: null });
+    const [deletingReviews, setDeletingReviews] = useState(new Set());
 
     const fetchDetails = async () => {
         setLoading(true);
@@ -5385,9 +6556,30 @@ const ServiceDetailPage = ({ serviceId, navigate, goBack, setSelectedProviderId 
     };
 
     const handleDeleteReview = async (reviewId) => {
+        // Prevent multiple delete requests for the same review
+        if (deletingReviews.has(reviewId)) {
+            console.log('Delete already in progress for review ID:', reviewId);
+            return;
+        }
+        
         if(window.confirm("Are you sure you want to delete your review?")) {
-            await api.reviews.delete(reviewId);
-            fetchDetails(); // Re-fetch to update list
+            try {
+                // Mark review as being deleted
+                setDeletingReviews(prev => new Set([...prev, reviewId]));
+                
+                await api.reviews.delete(reviewId);
+                fetchDetails(); // Re-fetch to update list
+            } catch (error) {
+                console.error('Delete review error:', error);
+                alert('Failed to delete review: ' + (error.message || 'Unknown error'));
+            } finally {
+                // Remove review from deleting set
+                setDeletingReviews(prev => {
+                    const next = new Set(prev);
+                    next.delete(reviewId);
+                    return next;
+                });
+            }
         }
     };
 
@@ -5462,6 +6654,7 @@ const ServiceDetailPage = ({ serviceId, navigate, goBack, setSelectedProviderId 
                                     isOwnReview={isAuthenticated && user.id === review.userid}
                                     onEdit={handleEditReview}
                                     onDelete={handleDeleteReview}
+                                    isDeleting={deletingReviews.has(review.id)}
                                 />
                             ))
                         ) : (
@@ -5515,6 +6708,7 @@ const ProfilePage = () => {
     const [loading, setLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [deletingAccount, setDeletingAccount] = useState(false);
 
     useEffect(() => {
         const fetchProfile = async () => {
@@ -5584,7 +6778,14 @@ const ProfilePage = () => {
     };
 
     const handleDeleteAccount = async () => {
+        // Prevent multiple delete requests
+        if (deletingAccount) {
+            console.log('Account delete already in progress');
+            return;
+        }
+        
         try {
+            setDeletingAccount(true);
             setLoading(true);
             const res = await api.profile.delete();
             
@@ -5609,6 +6810,7 @@ const ProfilePage = () => {
             console.error('Delete account error:', error);
             alert("There was an error deleting your account. Please try again or contact support.");
         } finally {
+            setDeletingAccount(false);
             setLoading(false);
         }
     };
@@ -5678,6 +6880,7 @@ const ProfilePage = () => {
                 isOpen={isDeleteModalOpen}
                 onClose={() => setIsDeleteModalOpen(false)}
                 onConfirm={handleDeleteAccount}
+                isDeleting={deletingAccount}
             />
         </div>
     );

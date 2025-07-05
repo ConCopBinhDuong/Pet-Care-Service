@@ -96,14 +96,23 @@ router.post('/pet/:petId', validateDietCreation, async (req, res) => {
         const petId = parseInt(req.params.petId);
         const { name, amount, description } = req.body;
 
+        console.log('🍽️ Diet creation request received:', {
+            userId,
+            userRole,
+            petId,
+            body: req.body
+        });
+
         // Only pet owners can add diets
         if (userRole !== 'Pet owner') {
+            console.log('❌ Diet creation denied: user is not pet owner');
             return res.status(403).json({ 
                 message: 'Access denied. Only pet owners can add diets.' 
             });
         }
 
         if (isNaN(petId)) {
+            console.log('❌ Diet creation failed: invalid pet ID');
             return res.status(400).json({ message: 'Invalid pet ID' });
         }
 
@@ -112,11 +121,15 @@ router.post('/pet/:petId', validateDietCreation, async (req, res) => {
             SELECT userid FROM pet WHERE petid = ?
         `, [petId]);
 
+        console.log('🐕 Pet ownership check:', { petId, pet, expectedUserId: userId });
+
         if (!pet) {
+            console.log('❌ Diet creation failed: pet not found');
             return res.status(404).json({ message: 'Pet not found' });
         }
 
         if (pet.userid !== userId) {
+            console.log('❌ Diet creation failed: pet does not belong to user');
             return res.status(403).json({ 
                 message: 'Access denied. You can only add diets for your own pets.' 
             });
@@ -146,7 +159,10 @@ router.post('/pet/:petId', validateDietCreation, async (req, res) => {
                 return dietRows[0];
             });
 
+            console.log('✅ Diet created successfully:', newDiet);
+
             res.status(201).json({
+                success: true,
                 message: 'Diet added successfully',
                 diet: newDiet
             });
@@ -156,7 +172,8 @@ router.post('/pet/:petId', validateDietCreation, async (req, res) => {
         }
 
     } catch (err) {
-        console.error('Add diet error:', err.message);
+        console.error('❌ Add diet error:', err.message);
+        console.error('❌ Add diet stack:', err.stack);
         
         if (err.message.includes('UNIQUE constraint failed') || err.message.includes('Duplicate entry')) {
             return res.status(409).json({ message: 'Diet with this name already exists for this pet' });
